@@ -1,22 +1,26 @@
 use std::path;
 
-use crate::cartridge::Cartridge;
+use crate::mbc;
+
+/* 8kB internal ram */
+const INTERNAL_RAM_SIZE: usize = 8182;
 
 pub struct MMU {
-    cartridge: Cartridge,
+    mbc: Box<mbc::MBC>,
+    ram: Vec<u8>,
 }
 
 impl MMU {
     pub fn new(path: &path::Path) -> MMU {
         MMU {
-            cartridge: Cartridge::new(path),
+            mbc: mbc::load_cartridge(path),
+            ram: Vec::with_capacity(INTERNAL_RAM_SIZE),
         }
     }
 
     pub fn read(&self, addr: u16) -> u8 {
         match addr {
-            0x0000...0x3FFF => self.cartridge.read(addr),
-            0x3FFF...0x7FFF => panic!("Memory banks not supported"),
+            0x0000...0x7FFF => self.mbc.read_rom(addr),
             0x8000...0x9FFF => panic!("NOT IMPLEMENTED"), /* 8KB Video RAM (VRAM) */
             0xA000...0xBFFF => panic!("NOT IMPLEMENTED"), /* 8KB External RAM */
             0xC000...0xCFFF => panic!("NOT IMPLEMENTED"), /* 4KB Work RAM Bank 0 (WRAM) */
@@ -33,7 +37,7 @@ impl MMU {
 
     pub fn write(&mut self, addr: u16, value: u8) {
         match addr {
-            0x0000...0x3FFF => self.cartridge.write(addr, value),
+            0x0000...0x7FFF => self.mbc.write_rom(addr, value),
             _ => panic!("Unimplemented memory access at addr {:4X}", addr),
         }
     }
