@@ -47,7 +47,14 @@ impl Cartridge {
     pub fn read(&self, addr: u16) -> u8 {
         match self.rom_data.get(addr as usize) {
             Some(byte) => *byte,
-            None => panic!("Out of bounds access on cartridge at address {}", addr),
+            None => panic!("Out of bounds access on cartridge at address {:4X}", addr),
+        }
+    }
+
+    pub fn write(&mut self, addr: u16, value: u8) {
+        match self.rom_data.get_mut(addr as usize) {
+            Some(byte) => *byte = value,
+            None => panic!("Out of bounds memory write at address {:4X}", addr),
         }
     }
 }
