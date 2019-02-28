@@ -9,7 +9,7 @@ pub fn decode_instruction(opcode: u8, mmu: &MMU, regs: &Registers) -> String {
             String::from(format!("LD B, {:2X}", d8))
         },
         0x32 => {
-            String::from(format!("LD [HL-], A (A = {:2X})", regs.a))
+            String::from(format!("LD [HL-] (HL = {:4X}), A (A = {:2X})", regs.get_hl(), regs.a))
         },
         0x0E => {
             let d8 = mmu.read(regs.pc + 1);
