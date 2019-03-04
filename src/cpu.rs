@@ -2,7 +2,7 @@ use std::path;
 
 use crate::decode;
 use crate::mmu::MMU;
-use crate::registers::{Registers, CpuFlag};
+use crate::registers::{CpuFlag, Registers};
 
 pub struct CPU {
     registers: Registers,
@@ -90,62 +90,159 @@ impl CPU {
 
     fn execute_instruction(&mut self, opcode: u8) -> u8 {
         match opcode {
-            0x00 => { /* NOP */
+            0x00 => {
+                /* NOP */
                 4
-            },
-            0x05 => { /* DEC B */
-                self.registers.b = self.alu8_dec(self.registers.b);
-
-                4
-            },
-            0x06 => { /* LD B, d8 */
-                self.registers.b = self.fetch_imm8();
-
-                8
-            },
-            0x20 => { /* LD (BC), A */
+            }
+            0x02 => {
+                /* LD (BC), A */
                 let addr = self.registers.get_bc();
                 self.mmu.write(addr, self.registers.a);
 
                 8
+            }
+            0x05 => {
+                /* DEC B */
+                self.registers.b = self.alu8_dec(self.registers.b);
+
+                4
+            }
+            0x06 => {
+                /* LD B, d8 */
+                self.registers.b = self.fetch_imm8();
+
+                8
             },
-            0x21 => { /* LD HL, d16 */
+            0x15 => {
+                /* DEC D */
+                self.registers.d = self.alu8_dec(self.registers.d);
+
+                4
+            },
+            0x1F => {
+                /* RRA */
+                let carry = match self.registers.a & 1 {
+                    1 => true,
+                    _ => false,
+                };
+
+                self.registers.a >>= 1;
+
+                self.registers.set_flag(CpuFlag::Z, self.registers.a == 0);
+                self.registers.set_flag(CpuFlag::N, false);
+                self.registers.set_flag(CpuFlag::H, false);
+                self.registers.set_flag(CpuFlag::C, carry);
+
+                4
+            }
+            0x20 => {
+                /* JR NZ, r8 */
+                let r8 = self.fetch_imm8();
+
+                if self.registers.get_flag(CpuFlag::Z) == false {
+                    self.registers.pc += r8 as u16;
+                    12
+                } else {
+                    8
+                }
+            }
+            0x21 => {
+                /* LD HL, d16 */
                 let d16 = self.fetch_imm16();
 
                 self.registers.set_hl(d16);
 
                 12
-            },
-            0x32 => { /* LD [HL-], A */
+            }
+            0x25 => {
+                /* DEC H */
+                self.registers.h = self.alu8_dec(self.registers.h);
+
+                4
+            }
+            0x32 => {
+                /* LD [HL-], A */
                 let addr = self.registers.get_hl();
 
                 self.mmu.write(addr, self.registers.a);
                 self.registers.set_hl(addr - 1);
 
                 8
-            },
-            0x0E => { /* LD C, d8 */
+            }
+            0x0E => {
+                /* LD C, d8 */
                 self.registers.c = self.fetch_imm8();
 
                 8
-            },
-            0xAF => { /* XOR A */
-                self.registers.a ^= self.registers.a;
+            }
+            0xAF => {
+                /* XOR A */
+                self.registers.a = self.alu8_xor(self.registers.a, self.registers.a);
+
+                4
+            }
+            0xB0 => {
+                /* OR B */
+                self.registers.a = self.alu8_or(self.registers.a, self.registers.b);
 
                 4
             },
-            0xC3 => { /* JP a16 */
+            0xB1 => {
+                /* OR C */
+                self.registers.a = self.alu8_or(self.registers.a, self.registers.c);
+
+                4
+            }
+            0xB2 => {
+                /* OR D */
+                self.registers.a = self.alu8_or(self.registers.a, self.registers.d);
+
+                4
+            }
+            0xB3 => {
+                /* OR E */
+                self.registers.a = self.alu8_or(self.registers.a, self.registers.e);
+
+                4
+            }
+            0xB4 => {
+                /* OR H */
+                self.registers.a = self.alu8_or(self.registers.a, self.registers.h);
+
+                4
+            }
+            0xB5 => {
+                /* OR L */
+                self.registers.a = self.alu8_or(self.registers.a, self.registers.l);
+
+                4
+            }
+            0xB6 => {
+                /* OR (HL) */
+                let val = self.mmu.read(self.registers.get_hl());
+                self.registers.a = self.alu8_or(self.registers.a, val);
+
+                4
+            }
+            0xB7 => {
+                /* OR A */
+                self.registers.a = self.alu8_or(self.registers.a, self.registers.a);
+
+                4
+            }
+            0xC3 => {
+                /* JP a16 */
                 self.registers.pc = self.fetch_imm16();
 
                 16
-            },
+            }
             _ => {
                 self.debug_dump();
                 panic!(
                     "Unimplemented instructions (opcode = {:2X}) at pc = {:4X}",
                     opcode, self.registers.pc
                 );
-            },
+            }
         }
     }
 
