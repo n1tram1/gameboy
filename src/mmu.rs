@@ -27,7 +27,18 @@ impl MMU {
             0xE000...0xFDFF => self.read(addr- 0x2000), /* Same as C000-DDFF (ECHO) */
             0xFE00...0xFE9F => panic!("NOT IMPLEMENTED"), /* Sprite Attribute Table (OAM) */
             0xFEA0...0xFEFF => panic!("NOT IMPLEMENTED"), /* Not Usable */
-            0xFF00...0xFF7F => panic!("NOT IMPLEMENTED"), /* I/O Ports */
+            0xFF00...0xFF7F => {
+                /* I/O Ports */
+                match addr {
+                    0xFF00...0xFF02 => panic!("Joypad registers not implemented"),
+                    0xFF04...0xFF07 => panic!("Timer registers not implemented"),
+                    0xFF0F => panic!("Interrupt register not implemented"),
+                    0xFF10...0xFF3F => 0, /* Sound I/O Ports, sound not implemented for now. */
+                    0xFF40...0xFF4B => panic!("GPU Registers not implemented"),
+                    0xFFFF => panic!("Interrupt Enable register not implemented"),
+                    _ => panic!("Illegal I/O port address"),
+                }
+            },
             0xFF80...0xFFFE => panic!("NOT IMPLEMENTED"), /* High RAM (HRAM) */
             0xFFFF => 0,                                  /* Interrupt Enable Register */
             _ => panic!("Out of bounds memory access at addr {}", addr),
@@ -39,6 +50,18 @@ impl MMU {
             0x0000...0x7FFF => self.mbc.write_rom(addr, value),
             0xC000...0xDFFF => self.ram[(addr - 0xC000) as usize] = value,
             0xE000...0xFDFF => self.write(addr - 0x2000, value),
+            0xFF00...0xFF7F => {
+                /* I/O Ports */
+                match addr {
+                    0xFF00...0xFF02 => panic!("Joypad registers not implemented"),
+                    0xFF04...0xFF07 => panic!("Timer registers not implemented"),
+                    0xFF0F => panic!("Interrupt register not implemented"),
+                    0xFF10...0xFF3F => (), /* Sound I/O Ports, sound not implemented for now. */
+                    0xFF40...0xFF4B => panic!("GPU Registers not implemented"),
+                    0xFFFF => panic!("Interrupt Enable register not implemented"),
+                    _ => panic!("Illegal I/O port address"),
+                }
+            },
             _ => panic!("Unimplemented memory access at addr {:4X}", addr),
         }
     }
