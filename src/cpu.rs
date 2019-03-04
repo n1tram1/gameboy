@@ -103,6 +103,19 @@ impl CPU {
 
                 8
             },
+            0x20 => { /* LD (BC), A */
+                let addr = self.registers.get_bc();
+                self.mmu.write(addr, self.registers.a);
+
+                8
+            },
+            0x21 => { /* LD HL, d16 */
+                let d16 = self.fetch_imm16();
+
+                self.registers.set_hl(d16);
+
+                12
+            },
             0x32 => { /* LD [HL-], A */
                 let addr = self.registers.get_hl();
 
@@ -116,13 +129,6 @@ impl CPU {
 
                 8
             },
-            0x21 => { /* LD HL, d16 */
-                let d16 = self.fetch_imm16();
-
-                self.registers.set_hl(d16);
-
-                12
-            },
             0xAF => { /* XOR A */
                 self.registers.a ^= self.registers.a;
 
@@ -131,7 +137,7 @@ impl CPU {
             0xC3 => { /* JP a16 */
                 self.registers.pc = self.fetch_imm16();
 
-                16;
+                16
             },
             _ => {
                 self.debug_dump();
@@ -144,11 +150,11 @@ impl CPU {
     }
 
     fn alu8_add(&mut self, a: u8, b: u8) -> u8 {
-        let res, overflow = a.overflow_add(b);
+        let (res, overflow) = a.overflowing_add(b);
 
         self.registers.set_flag(CpuFlag::Z, res == 0);
         self.registers.set_flag(CpuFlag::N, false);
-        self.registers.set_flag(CpuFlag::H, res & (1 << 4)); /* TODO: test H flag, it might be very broken */
+        self.registers.set_flag(CpuFlag::H, (res & (1 << 4)) > 0); /* TODO: test H flag, it might be very broken */
         self.registers.set_flag(CpuFlag::C, overflow);
 
         res
@@ -160,22 +166,27 @@ impl CPU {
             false => 0,
         };
 
-        let res, overflow = a.overflow_add(b + carry);
+        let (res, overflow) = a.overflowing_add(b + carry);
 
         self.registers.set_flag(CpuFlag::Z, res == 0);
         self.registers.set_flag(CpuFlag::N, false);
-        self.registers.set_flag(CpuFlag::H, res & (1 << 4)); /* TODO: test H flag, it might be very broken */
+        self.registers.set_flag(CpuFlag::H, (res & (1 << 4)) > 0); /* TODO: test H flag, it might be very broken */
         self.registers.set_flag(CpuFlag::C, overflow);
 
         res
     }
 
     fn alu8_sub(&mut self, a: u8, b: u8) -> u8 {
-        let res, overflow = a.overflow_sub(b + carry);
+        let carry = match self.registers.get_flag(CpuFlag::C) {
+            true => 1,
+            false => 0,
+        };
+
+        let (res, overflow) = a.overflowing_sub(b + carry);
 
         self.registers.set_flag(CpuFlag::Z, res == 0);
         self.registers.set_flag(CpuFlag::N, true);
-        self.registers.set_flag(CpuFlag::H, res & (1 << 4)); /* TODO: test H flag, it might be very broken */
+        self.registers.set_flag(CpuFlag::H, (res & (1 << 4)) > 0); /* TODO: test H flag, it might be very broken */
         self.registers.set_flag(CpuFlag::C, overflow);
 
         res
@@ -187,11 +198,11 @@ impl CPU {
             false => 0,
         };
 
-        let res, overflow = a.overflow_sub(b + carry);
+        let (res, overflow) = a.overflowing_sub(b + carry);
 
         self.registers.set_flag(CpuFlag::Z, res == 0);
         self.registers.set_flag(CpuFlag::N, true);
-        self.registers.set_flag(CpuFlag::H, res & (1 << 4)); /* TODO: test H flag, it might be very broken */
+        self.registers.set_flag(CpuFlag::H, (res & (1 << 4)) > 0); /* TODO: test H flag, it might be very broken */
         self.registers.set_flag(CpuFlag::C, overflow);
 
         res
@@ -230,17 +241,17 @@ impl CPU {
         res
     }
 
-    fn alu8_cp(&mut self, a: u8, b: u8) -> u8 {
-        let _, overflow = a.overflow_sub(b + carry);
+    fn alu8_cp(&mut self, a: u8, b: u8) {
+        let (res, overflow) = a.overflowing_sub(b);
 
         self.registers.set_flag(CpuFlag::Z, res == 0);
         self.registers.set_flag(CpuFlag::N, true);
-        self.registers.set_flag(CpuFlag::H, res & (1 << 4)); /* TODO: test H flag, it might be very broken */
+        self.registers.set_flag(CpuFlag::H, (res & (1 << 4)) > 0); /* TODO: test H flag, it might be very broken */
         self.registers.set_flag(CpuFlag::C, overflow);
     }
 
     fn alu8_inc(&mut self, n: u8) -> u8 {
-        let res = n.wrapped_add(1);
+        let res = n.wrapping_add(1);
 
         self.registers.set_flag(CpuFlag::Z, res == 0);
         self.registers.set_flag(CpuFlag::N, false);
@@ -249,7 +260,7 @@ impl CPU {
         res
     }
     fn alu8_dec(&mut self, n: u8) -> u8 {
-        let res = n.wrapped_sub(1);
+        let res = n.wrapping_sub(1);
 
         self.registers.set_flag(CpuFlag::Z, res == 0);
         self.registers.set_flag(CpuFlag::N, true);
