@@ -6,9 +6,7 @@ pub struct MBC0 {
 
 impl MBC0 {
     pub fn new(rom: Vec<u8>) -> MBC0 {
-        MBC0 {
-            rom: rom,
-        }
+        MBC0 { rom }
     }
 }
 
@@ -24,11 +22,7 @@ impl MBC for MBC0 {
         0
     }
 
-    fn write_rom(&mut self, addr: u16, val: u8) {
-        ()
-    }
+    fn write_rom(&mut self, addr: u16, val: u8) {}
 
-    fn write_ram(&mut self, addr: u16, val: u8) {
-        ()
-    }
+    fn write_ram(&mut self, addr: u16, val: u8) {}
 }
