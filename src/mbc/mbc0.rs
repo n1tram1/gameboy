@@ -18,11 +18,11 @@ impl MBC for MBC0 {
         }
     }
 
-    fn read_ram(&self, addr: u16) -> u8 {
+    fn read_ram(&self, _addr: u16) -> u8 {
         0
     }
 
-    fn write_rom(&mut self, addr: u16, val: u8) {}
+    fn write_rom(&mut self, _addr: u16, _val: u8) {}
 
-    fn write_ram(&mut self, addr: u16, val: u8) {}
+    fn write_ram(&mut self, _addr: u16, _val: u8) {}
 }
