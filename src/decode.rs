@@ -4,6 +4,7 @@ use crate::registers::Registers;
 pub fn decode_instruction(opcode: u8, mmu: &MMU, regs: &Registers) -> String {
     match opcode {
         0x00 => String::from("NOP"),
+        0x05 => String::from(format!("DEC B (B = {})", regs.b)),
         0x06 => {
             let d8 = mmu.read(regs.pc + 1);
             String::from(format!("LD B, {:2X}", d8))

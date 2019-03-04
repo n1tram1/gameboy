@@ -2,7 +2,7 @@ use std::path;
 
 use crate::decode;
 use crate::mmu::MMU;
-use crate::registers::Registers;
+use crate::registers::{Registers, CpuFlag};
 
 pub struct CPU {
     registers: Registers,
@@ -15,7 +15,6 @@ pub struct CPU {
 
 impl CPU {
     pub fn new(path: &path::Path) -> CPU {
-        /* TODO: check needed initialization values. */
         CPU {
             registers: Registers::new(),
             mmu: MMU::new(path),
@@ -58,7 +57,7 @@ impl CPU {
             /* Go past opcode byte */
             self.registers.pc += 1;
 
-            self.execute_instruction(op);
+            self.cycles_remaining += self.execute_instruction(op);
 
             self.total_cycles += self.cycles_remaining as usize;
         } else {
@@ -89,10 +88,20 @@ impl CPU {
         word
     }
 
-    fn execute_instruction(&mut self, opcode: u8) {
+    fn execute_instruction(&mut self, opcode: u8) -> u8 {
         match opcode {
             0x00 => { /* NOP */
-                self.cycles_remaining += 4
+                4
+            },
+            0x05 => { /* DEC B */
+                self.registers.b = self.alu8_dec(self.registers.b);
+
+                4
+            },
+            0x06 => { /* LD B, d8 */
+                self.registers.b = self.fetch_imm8();
+
+                8
             },
             0x32 => { /* LD [HL-], A */
                 let addr = self.registers.get_hl();
@@ -100,40 +109,29 @@ impl CPU {
                 self.mmu.write(addr, self.registers.a);
                 self.registers.set_hl(addr - 1);
 
-                self.cycles_remaining += 8;
-            },
-            0x06 => { /* LD B, d8 */
-                let d8 = self.fetch_imm8();
-
-                self.registers.b = d8;
-
-                self.cycles_remaining += 8;
+                8
             },
             0x0E => { /* LD C, d8 */
-                let d8 = self.fetch_imm8();
+                self.registers.c = self.fetch_imm8();
 
-                self.registers.c = d8;
-
-                self.cycles_remaining += 8
+                8
             },
             0x21 => { /* LD HL, d16 */
                 let d16 = self.fetch_imm16();
 
                 self.registers.set_hl(d16);
 
-                self.cycles_remaining = 12;
+                12
             },
             0xAF => { /* XOR A */
                 self.registers.a ^= self.registers.a;
 
-                self.cycles_remaining += 4
+                4
             },
             0xC3 => { /* JP a16 */
-                let a16 = self.fetch_imm16();
+                self.registers.pc = self.fetch_imm16();
 
-                self.registers.pc = a16;
-
-                self.cycles_remaining = 16;
+                16;
             },
             _ => {
                 self.debug_dump();
@@ -143,5 +141,120 @@ impl CPU {
                 );
             },
         }
+    }
+
+    fn alu8_add(&mut self, a: u8, b: u8) -> u8 {
+        let res, overflow = a.overflow_add(b);
+
+        self.registers.set_flag(CpuFlag::Z, res == 0);
+        self.registers.set_flag(CpuFlag::N, false);
+        self.registers.set_flag(CpuFlag::H, res & (1 << 4)); /* TODO: test H flag, it might be very broken */
+        self.registers.set_flag(CpuFlag::C, overflow);
+
+        res
+    }
+
+    fn alu8_adc(&mut self, a: u8, b: u8) -> u8 {
+        let carry = match self.registers.get_flag(CpuFlag::C) {
+            true => 1,
+            false => 0,
+        };
+
+        let res, overflow = a.overflow_add(b + carry);
+
+        self.registers.set_flag(CpuFlag::Z, res == 0);
+        self.registers.set_flag(CpuFlag::N, false);
+        self.registers.set_flag(CpuFlag::H, res & (1 << 4)); /* TODO: test H flag, it might be very broken */
+        self.registers.set_flag(CpuFlag::C, overflow);
+
+        res
+    }
+
+    fn alu8_sub(&mut self, a: u8, b: u8) -> u8 {
+        let res, overflow = a.overflow_sub(b + carry);
+
+        self.registers.set_flag(CpuFlag::Z, res == 0);
+        self.registers.set_flag(CpuFlag::N, true);
+        self.registers.set_flag(CpuFlag::H, res & (1 << 4)); /* TODO: test H flag, it might be very broken */
+        self.registers.set_flag(CpuFlag::C, overflow);
+
+        res
+    }
+
+    fn alu8_sdc(&mut self, a: u8, b: u8) -> u8 {
+        let carry = match self.registers.get_flag(CpuFlag::C) {
+            true => 1,
+            false => 0,
+        };
+
+        let res, overflow = a.overflow_sub(b + carry);
+
+        self.registers.set_flag(CpuFlag::Z, res == 0);
+        self.registers.set_flag(CpuFlag::N, true);
+        self.registers.set_flag(CpuFlag::H, res & (1 << 4)); /* TODO: test H flag, it might be very broken */
+        self.registers.set_flag(CpuFlag::C, overflow);
+
+        res
+    }
+
+    fn alu8_and(&mut self, a: u8, b: u8) -> u8 {
+        let res = a & b;
+
+        self.registers.set_flag(CpuFlag::Z, res == 0);
+        self.registers.set_flag(CpuFlag::N, false);
+        self.registers.set_flag(CpuFlag::H, true);
+        self.registers.set_flag(CpuFlag::C, false);
+
+        res
+    }
+
+    fn alu8_or(&mut self, a: u8, b: u8) -> u8 {
+        let res = a | b;
+
+        self.registers.set_flag(CpuFlag::Z, res == 0);
+        self.registers.set_flag(CpuFlag::N, false);
+        self.registers.set_flag(CpuFlag::H, false);
+        self.registers.set_flag(CpuFlag::C, false);
+
+        res
+    }
+
+    fn alu8_xor(&mut self, a: u8, b: u8) -> u8 {
+        let res = a ^ b;
+
+        self.registers.set_flag(CpuFlag::Z, res == 0);
+        self.registers.set_flag(CpuFlag::N, false);
+        self.registers.set_flag(CpuFlag::H, false);
+        self.registers.set_flag(CpuFlag::C, false);
+
+        res
+    }
+
+    fn alu8_cp(&mut self, a: u8, b: u8) -> u8 {
+        let _, overflow = a.overflow_sub(b + carry);
+
+        self.registers.set_flag(CpuFlag::Z, res == 0);
+        self.registers.set_flag(CpuFlag::N, true);
+        self.registers.set_flag(CpuFlag::H, res & (1 << 4)); /* TODO: test H flag, it might be very broken */
+        self.registers.set_flag(CpuFlag::C, overflow);
+    }
+
+    fn alu8_inc(&mut self, n: u8) -> u8 {
+        let res = n.wrapped_add(1);
+
+        self.registers.set_flag(CpuFlag::Z, res == 0);
+        self.registers.set_flag(CpuFlag::N, false);
+        self.registers.set_flag(CpuFlag::H, (n & 0x0F) == 0);
+
+        res
+    }
+    fn alu8_dec(&mut self, n: u8) -> u8 {
+        let res = n.wrapped_sub(1);
+
+        self.registers.set_flag(CpuFlag::Z, res == 0);
+        self.registers.set_flag(CpuFlag::N, true);
+        self.registers.set_flag(CpuFlag::H, (n & 0x0F) == 0);
+
+        res
     }
 }

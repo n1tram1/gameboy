@@ -12,10 +12,10 @@ pub struct Registers {
 }
 
 pub enum CpuFlag {
-    Z = 0b1000000,
-    N = 0b0100000,
-    H = 0b0010000,
-    C = 0b0001000,
+    Z = 0b0100_0000,
+    N = 0b0010_0000,
+    H = 0b0001_0000,
+    C = 0b0000_1000,
 }
 
 impl Registers {
