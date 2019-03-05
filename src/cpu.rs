@@ -11,6 +11,8 @@ pub struct CPU {
     /* Cycle related variables. */
     total_cycles: usize,
     cycles_remaining: u8,
+
+    ime: bool,
 }
 
 impl CPU {
@@ -21,6 +23,8 @@ impl CPU {
 
             total_cycles: 0,
             cycles_remaining: 0,
+
+            ime: false,
         }
     }
 
@@ -256,6 +260,12 @@ impl CPU {
 
                 4
             }
+            0x3E => {
+                /* LD A,d8 */
+                self.registers.a = self.fetch_imm8();
+
+                8
+            }
             0x7B => {
                 /* LD A, E */
                 self.registers.a = self.registers.e;
@@ -329,6 +339,38 @@ impl CPU {
                 self.registers.pc = self.fetch_imm16();
 
                 16
+            }
+            0xE0 => {
+                /* LDH (a8),A */
+                let addr = 0xFF00 + self.fetch_imm8() as u16;
+                self.mmu.write(addr, self.registers.a);
+
+                12
+            }
+            0xF0 => {
+                /* LDH A,(a8) */
+                let addr = 0xFF00 + self.fetch_imm8() as u16;
+                self.registers.a = self.mmu.read(addr);
+
+                12
+            }
+            0xF3 => {
+                /* DI */
+                /* TODO: the IME needs to be set after the next instruction, this is not what is
+                 * going on so far, this is putting the timings off
+                 */
+                self.ime = false;
+
+                4
+            }
+            0xF8 => {
+                /* EI */
+                /* TODO: the IME needs to be set after the next instruction, this is not what is
+                 * going on so far, this is putting the timings off
+                 */
+                self.ime = true;
+
+                4
             }
             _ => {
                 self.debug_dump();

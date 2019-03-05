@@ -42,6 +42,9 @@ pub fn decode_instruction(opcode: u8, mmu: &MMU, regs: &Registers) -> String {
         0x32 => {
             String::from(format!("LD [HL-] (HL = {:4X}), A (A = {:2X})", regs.get_hl(), regs.a))
         },
+        0x3E => {
+            String::from(format!("LD A, {:2X}", mmu.read(regs.pc + 1)))
+        }
         0x7B => {
             String::from("LD A, E")
         }
@@ -80,6 +83,18 @@ pub fn decode_instruction(opcode: u8, mmu: &MMU, regs: &Registers) -> String {
             let a16 = mmu.read_wide(regs.pc + 1);
             String::from(format!("JP a16 {:4X}", a16))
         },
+        0xE0 => {
+            String::from(format!("LDH ($FF00 + {:2X}),A", mmu.read(regs.pc + 1)))
+        }
+        0xF0 => {
+            String::from(format!("LDH A,($FF00 + {:2X})", mmu.read(regs.pc + 1)))
+        }
+        0xF3 => {
+            String::from("DI")
+        }
+        0xF8 => {
+            String::from("EI")
+        }
         _ => String::from("NOT IMPLEMENTED IN DECODER")
     }
 }

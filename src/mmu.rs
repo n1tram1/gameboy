@@ -8,6 +8,9 @@ const INTERNAL_RAM_SIZE: usize = 8192;
 pub struct MMU {
     mbc: Box<mbc::MBC>,
     ram: Vec<u8>,
+
+    interrupt_enable: u8,
+    interrupt_flag: u8,
 }
 
 impl MMU {
@@ -15,6 +18,9 @@ impl MMU {
         MMU {
             mbc: mbc::load_cartridge(path),
             ram: vec![0; INTERNAL_RAM_SIZE],
+
+            interrupt_enable: 0,
+            interrupt_flag: 0
         }
     }
 
@@ -35,12 +41,12 @@ impl MMU {
                     0xFF0F => panic!("Interrupt register not implemented"),
                     0xFF10...0xFF3F => 0, /* Sound I/O Ports, sound not implemented for now. */
                     0xFF40...0xFF4B => panic!("GPU Registers not implemented"),
-                    0xFFFF => panic!("Interrupt Enable register not implemented"),
+                    0xFF0F => self.interrupt_flag,
                     _ => panic!("Illegal I/O port address"),
                 }
             },
             0xFF80...0xFFFE => panic!("NOT IMPLEMENTED"), /* High RAM (HRAM) */
-            0xFFFF => 0,                                  /* Interrupt Enable Register */
+            0xFFFF => self.interrupt_enable, /* Interrupt Enable Register */
             _ => panic!("Out of bounds memory access at addr {}", addr),
         }
     }
@@ -55,13 +61,13 @@ impl MMU {
                 match addr {
                     0xFF00...0xFF02 => panic!("Joypad registers not implemented"),
                     0xFF04...0xFF07 => panic!("Timer registers not implemented"),
-                    0xFF0F => panic!("Interrupt register not implemented"),
+                    0xFF0F => self.interrupt_flag = value,
                     0xFF10...0xFF3F => (), /* Sound I/O Ports, sound not implemented for now. */
                     0xFF40...0xFF4B => panic!("GPU Registers not implemented"),
-                    0xFFFF => panic!("Interrupt Enable register not implemented"),
                     _ => panic!("Illegal I/O port address"),
                 }
             },
+            0xFFFF => self.interrupt_enable = value,
             _ => panic!("Unimplemented memory access at addr {:4X}", addr),
         }
     }
