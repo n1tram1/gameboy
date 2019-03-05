@@ -101,6 +101,12 @@ impl CPU {
 
                 8
             }
+            0x04 => {
+                /* INC B */
+                self.registers.b = self.alu8_inc(self.registers.b);
+
+                4
+            }
             0x05 => {
                 /* DEC B */
                 self.registers.b = self.alu8_dec(self.registers.b);
@@ -113,12 +119,48 @@ impl CPU {
 
                 8
             },
+            0x0C => {
+                /* INC C */
+                self.registers.c = self.alu8_inc(self.registers.c);
+
+                4
+            }
+            0x0D => {
+                /* DEC C */
+                self.registers.c = self.alu8_dec(self.registers.c);
+
+                4
+            }
+            0x0E => {
+                /* LD C, d8 */
+                self.registers.c = self.fetch_imm8();
+
+                8
+            }
+            0x14 => {
+                /* INC D */
+                self.registers.d = self.alu8_inc(self.registers.d);
+
+                4
+            }
             0x15 => {
                 /* DEC D */
                 self.registers.d = self.alu8_dec(self.registers.d);
 
                 4
             },
+            0x1C => {
+                /* INC E */
+                self.registers.e = self.alu8_inc(self.registers.e);
+
+                4
+            }
+            0x1E => {
+                /* DEC E */
+                self.registers.e = self.alu8_dec(self.registers.e);
+
+                4
+            }
             0x1F => {
                 /* RRA */
                 let carry = match self.registers.a & 1 {
@@ -137,10 +179,11 @@ impl CPU {
             }
             0x20 => {
                 /* JR NZ, r8 */
-                let r8 = self.fetch_imm8();
+                let r8 = self.fetch_imm8() as i8;
 
                 if self.registers.get_flag(CpuFlag::Z) == false {
-                    self.registers.pc += r8 as u16;
+                    self.registers.pc = ((self.registers.pc as u32 as i32) + (r8 as i32)) as u16;
+
                     12
                 } else {
                     8
@@ -154,9 +197,27 @@ impl CPU {
 
                 12
             }
+            0x24 => {
+                /* INC H */
+                self.registers.h = self.alu8_inc(self.registers.h);
+
+                4
+            }
             0x25 => {
                 /* DEC H */
                 self.registers.h = self.alu8_dec(self.registers.h);
+
+                4
+            }
+            0x2C => {
+                /* INC L */
+                self.registers.l = self.alu8_inc(self.registers.l);
+
+                4
+            }
+            0x2D => {
+                /* DEC L */
+                self.registers.l = self.alu8_dec(self.registers.l);
 
                 4
             }
@@ -169,11 +230,37 @@ impl CPU {
 
                 8
             }
-            0x0E => {
-                /* LD C, d8 */
-                self.registers.c = self.fetch_imm8();
+            // 0x34 => {
+            //     /* INC (HL) */
+            //     let addr = self.registers.get_hl();
+            //     self.mmu.write(self.alu8_inc(addr));
 
-                8
+            //     12
+            // }
+            // 0x35 => {
+            //     /* DEC (HL) */
+            //     let addr = self.registers.get_hl();
+            //     self.mmu.write(self.alu8_dec(addr));
+
+            //     12
+            // }
+            0x3C => {
+                /* INC A */
+                self.registers.a = self.alu8_inc(self.registers.a);
+
+                4
+            }
+            0x3D => {
+                /* DEC A */
+                self.registers.a = self.alu8_dec(self.registers.a);
+
+                4
+            }
+            0x7B => {
+                /* LD A, E */
+                self.registers.a = self.registers.e;
+
+                4
             }
             0xAF => {
                 /* XOR A */
@@ -227,6 +314,13 @@ impl CPU {
             0xB7 => {
                 /* OR A */
                 self.registers.a = self.alu8_or(self.registers.a, self.registers.a);
+
+                4
+            }
+            0xBF => {
+                /* CP A */
+                let n = self.fetch_imm8();
+                self.registers.a = self.alu8_sub(self.registers.a, n);
 
                 4
             }
