@@ -48,7 +48,11 @@ impl CPU {
     }
 
     pub fn do_cycle(&mut self) {
+
         if self.should_load_next_instr() {
+            // if self.registers.pc >= 0x95 && self.registers.pc <= 0xa3 {
+            //     self.debug_dump();
+            // }
             let op = self.fetch_next_opcode();
 
             println!(
@@ -141,6 +145,19 @@ impl CPU {
 
                 8
             }
+            0x11 => {
+                /* LD DE, imm16 */
+                let imm16 = self.fetch_imm16();
+                self.registers.set_de(imm16);
+
+                12
+            }
+            0x13 => {
+                let de = self.registers.get_de();
+                self.registers.set_de(de + 1);
+
+                8
+            }
             0x14 => {
                 /* INC D */
                 self.registers.d = self.alu8_inc(self.registers.d);
@@ -153,6 +170,25 @@ impl CPU {
 
                 4
             },
+            0x17 => {
+                /* RLA A */
+                self.registers.a = self.alu8_rl(self.registers.a);
+
+                4
+            }
+            0x18 => {
+                /* JR r8 */
+                let r8 = self.fetch_imm8() as i8;
+                self.registers.pc = CPU::calc_rel_addr(self.registers.pc, r8);
+
+                12
+            }
+            0x1A => {
+                /* LD A,(DE) */
+                self.registers.a = self.mmu.read(self.registers.get_de());
+
+                8
+            }
             0x1C => {
                 /* INC E */
                 self.registers.e = self.alu8_inc(self.registers.e);
@@ -186,8 +222,7 @@ impl CPU {
                 let r8 = self.fetch_imm8() as i8;
 
                 if self.registers.get_flag(CpuFlag::Z) == false {
-                    self.registers.pc = ((self.registers.pc as u32 as i32) + (r8 as i32)) as u16;
-
+                    self.registers.pc = CPU::calc_rel_addr(self.registers.pc, r8);
                     12
                 } else {
                     8
@@ -201,6 +236,20 @@ impl CPU {
 
                 12
             }
+            0x22 => {
+                /* LD (HL+),A */
+                let hl = self.registers.get_hl();
+                self.mmu.write(hl, self.registers.a);
+                self.registers.set_hl(hl + 1);
+
+                8
+            }
+            0x23 => {
+                /* INC HL */
+                self.registers.set_hl(self.registers.get_hl() + 1);
+
+                8
+            }
             0x24 => {
                 /* INC H */
                 self.registers.h = self.alu8_inc(self.registers.h);
@@ -212,6 +261,17 @@ impl CPU {
                 self.registers.h = self.alu8_dec(self.registers.h);
 
                 4
+            }
+            0x28 => {
+                /* JR Z, r8 */
+                let r8 = self.fetch_imm8() as i8;
+
+                if self.registers.get_flag(CpuFlag::Z) {
+                    self.registers.pc = CPU::calc_rel_addr(self.registers.pc, r8);
+                    12
+                } else {
+                    8
+                }
             }
             0x2C => {
                 /* INC L */
@@ -225,6 +285,18 @@ impl CPU {
 
                 4
             }
+            0x2E => {
+                /* LD L,d8 */
+                self.registers.l = self.fetch_imm8();
+
+                8
+            }
+            0x31 => {
+                /* LD SP, d16 */
+                self.registers.sp = self.fetch_imm16();
+
+                12
+            }
             0x32 => {
                 /* LD [HL-], A */
                 let addr = self.registers.get_hl();
@@ -234,20 +306,6 @@ impl CPU {
 
                 8
             }
-            // 0x34 => {
-            //     /* INC (HL) */
-            //     let addr = self.registers.get_hl();
-            //     self.mmu.write(self.alu8_inc(addr));
-
-            //     12
-            // }
-            // 0x35 => {
-            //     /* DEC (HL) */
-            //     let addr = self.registers.get_hl();
-            //     self.mmu.write(self.alu8_dec(addr));
-
-            //     12
-            // }
             0x3C => {
                 /* INC A */
                 self.registers.a = self.alu8_inc(self.registers.a);
@@ -263,6 +321,18 @@ impl CPU {
             0x3E => {
                 /* LD A,d8 */
                 self.registers.a = self.fetch_imm8();
+
+                8
+            }
+            0x4F => {
+                /* LD C,A */
+                self.registers.c = self.registers.a;
+
+                4
+            }
+            0x77 => {
+                /* LD (HL),A */
+                self.mmu.write(self.registers.get_hl(), self.registers.a);
 
                 8
             }
@@ -334,18 +404,63 @@ impl CPU {
 
                 4
             }
+            0xC1 => {
+                /* POP BC */
+                let addr = self.pop_word();
+                self.registers.set_bc(addr);
+
+                16
+            }
             0xC3 => {
                 /* JP a16 */
                 self.registers.pc = self.fetch_imm16();
 
                 16
             }
+            0xC5 => {
+                /* PUSH BC */
+                self.push_word(self.registers.get_bc());
+
+                16
+            }
+            0xC9 => {
+                /* RET */
+                self.registers.pc = self.pop_word();
+
+                8
+            }
+            0xCB => {
+                /* Prefix CB */
+                let instr = self.fetch_imm8();
+                self.execute_cb_instr(instr)
+            }
+            0xCD => {
+                /* CALL addr */
+                let addr = self.fetch_imm16();
+                self.push_word(self.registers.pc);
+
+                self.registers.pc = addr;
+
+                24
+            },
             0xE0 => {
                 /* LDH (a8),A */
                 let addr = 0xFF00 + self.fetch_imm8() as u16;
                 self.mmu.write(addr, self.registers.a);
 
                 12
+            }
+            0xE2 => {
+                /* LD (C), A */
+                self.mmu.write(0xFF00 + self.registers.c as u16, self.registers.a);
+
+                8
+            }
+            0xEA => {
+                let addr = self.fetch_imm16();
+                self.mmu.write(addr, self.registers.a);
+
+                16
             }
             0xF0 => {
                 /* LDH A,(a8) */
@@ -372,7 +487,14 @@ impl CPU {
 
                 4
             }
+            0xFE => {
+                let d8 = self.fetch_imm8();
+                self.alu8_cp(self.registers.a, d8);
+
+                8
+            }
             _ => {
+                // self.mmu.print_vram();
                 self.debug_dump();
                 panic!(
                     "Unimplemented instructions (opcode = {:2X}) at pc = {:4X}",
@@ -380,6 +502,44 @@ impl CPU {
                 );
             }
         }
+    }
+
+    fn execute_cb_instr(&mut self, instr: u8) -> u8 {
+        match instr {
+            0x11 => {
+                /* RL C */
+                self.registers.c = self.alu8_rl(self.registers.c);
+
+                8
+            }
+            0x7C => {
+                /* Bit 7,H */
+                let h = self.registers.h;
+
+                self.registers.set_flag(CpuFlag::Z, (h & (1 << 7)) > 0);
+                self.registers.set_flag(CpuFlag::N, false);
+                self.registers.set_flag(CpuFlag::H, true);
+
+                8
+            }
+            _ => panic!("Unimplemented CB instruction {:2X}", instr),
+        }
+    }
+
+    fn calc_rel_addr(addr: u16, r8: i8) -> u16 {
+        ((addr as u32 as i32) + (r8 as i32)) as u16
+    }
+
+    fn push_word(&mut self, val: u16) {
+        self.registers.sp -= 2;
+        self.mmu.write_wide(self.registers.sp, val);
+    }
+
+    fn pop_word(&mut self) -> u16 {
+        let val = self.mmu.read_wide(self.registers.sp);
+        self.registers.sp += 2;
+
+        val
     }
 
     fn alu8_add(&mut self, a: u8, b: u8) -> u8 {
@@ -498,6 +658,18 @@ impl CPU {
         self.registers.set_flag(CpuFlag::Z, res == 0);
         self.registers.set_flag(CpuFlag::N, true);
         self.registers.set_flag(CpuFlag::H, (n & 0x0F) == 0);
+
+        res
+    }
+
+    fn alu8_rl(&mut self, n: u8) -> u8 {
+        let carry = n & 0x80 == 0x80;
+        let res = n.rotate_left(1);
+
+        self.registers.set_flag(CpuFlag::Z, res == 0);
+        self.registers.set_flag(CpuFlag::N, false);
+        self.registers.set_flag(CpuFlag::H, false);
+        self.registers.set_flag(CpuFlag::C, carry);
 
         res
     }

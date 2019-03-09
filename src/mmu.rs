@@ -1,78 +1,122 @@
 use std::path;
 
 use crate::mbc;
+use crate::ppu;
+
+const DMG_ROM_SIZE: usize = 0x100;
+const DMG_ROM: [u8; DMG_ROM_SIZE] = [
+    0x31, 0xfe, 0xff, 0xaf, 0x21, 0xff, 0x9f, 0x32, 0xcb, 0x7c, 0x20, 0xfb, 0x21, 0x26, 0xff, 0xe,
+    0x11, 0x3e, 0x80, 0x32, 0xe2, 0xc, 0x3e, 0xf3, 0xe2, 0x32, 0x3e, 0x77, 0x77, 0x3e, 0xfc, 0xe0,
+    0x47, 0x11, 0x4, 0x1, 0x21, 0x10, 0x80, 0x1a, 0xcd, 0x95, 0x0, 0xcd, 0x96, 0x0, 0x13, 0x7b,
+    0xfe, 0x34, 0x20, 0xf3, 0x11, 0xd8, 0x0, 0x6, 0x8, 0x1a, 0x13, 0x22, 0x23, 0x5, 0x20, 0xf9,
+    0x3e, 0x19, 0xea, 0x10, 0x99, 0x21, 0x2f, 0x99, 0xe, 0xc, 0x3d, 0x28, 0x8, 0x32, 0xd, 0x20,
+    0xf9, 0x2e, 0xf, 0x18, 0xf3, 0x67, 0x3e, 0x64, 0x57, 0xe0, 0x42, 0x3e, 0x91, 0xe0, 0x40, 0x4,
+    0x1e, 0x2, 0xe, 0xc, 0xf0, 0x44, 0xfe, 0x90, 0x20, 0xfa, 0xd, 0x20, 0xf7, 0x1d, 0x20, 0xf2,
+    0xe, 0x13, 0x24, 0x7c, 0x1e, 0x83, 0xfe, 0x62, 0x28, 0x6, 0x1e, 0xc1, 0xfe, 0x64, 0x20, 0x6,
+    0x7b, 0xe2, 0xc, 0x3e, 0x87, 0xe2, 0xf0, 0x42, 0x90, 0xe0, 0x42, 0x15, 0x20, 0xd2, 0x5, 0x20,
+    0x4f, 0x16, 0x20, 0x18, 0xcb, 0x4f, 0x6, 0x4, 0xc5, 0xcb, 0x11, 0x17, 0xc1, 0xcb, 0x11, 0x17,
+    0x5, 0x20, 0xf5, 0x22, 0x23, 0x22, 0x23, 0xc9, 0xce, 0xed, 0x66, 0x66, 0xcc, 0xd, 0x0, 0xb,
+    0x3, 0x73, 0x0, 0x83, 0x0, 0xc, 0x0, 0xd, 0x0, 0x8, 0x11, 0x1f, 0x88, 0x89, 0x0, 0xe, 0xdc,
+    0xcc, 0x6e, 0xe6, 0xdd, 0xdd, 0xd9, 0x99, 0xbb, 0xbb, 0x67, 0x63, 0x6e, 0xe, 0xec, 0xcc, 0xdd,
+    0xdc, 0x99, 0x9f, 0xbb, 0xb9, 0x33, 0x3e, 0x3c, 0x42, 0xb9, 0xa5, 0xb9, 0xa5, 0x42, 0x3c, 0x21,
+    0x4, 0x1, 0x11, 0xa8, 0x0, 0x1a, 0x13, 0xbe, 0x20, 0xfe, 0x23, 0x7d, 0xfe, 0x34, 0x20, 0xf5,
+    0x6, 0x19, 0x78, 0x86, 0x23, 0x5, 0x20, 0xfb, 0x86, 0x20, 0xfe, 0x3e, 0x1, 0xe0, 0x50,
+];
 
 /* 8kB internal ram */
-const INTERNAL_RAM_SIZE: usize = 8192;
+const INTERNAL_RAM_SIZE: usize = 0x2000;
+const HIGH_RAM_SIZE: usize = 0x7f;
 
 pub struct MMU {
     mbc: Box<mbc::MBC>,
-    ram: Vec<u8>,
+    ram: [u8; INTERNAL_RAM_SIZE],
+    high_ram: [u8; HIGH_RAM_SIZE],
+    ppu: ppu::PPU,
 
     interrupt_enable: u8,
     interrupt_flag: u8,
+    dmg_disabled: bool,
 }
 
 impl MMU {
     pub fn new(path: &path::Path) -> MMU {
         MMU {
             mbc: mbc::load_cartridge(path),
-            ram: vec![0; INTERNAL_RAM_SIZE],
+            ram: [0; INTERNAL_RAM_SIZE],
+            high_ram: [0; HIGH_RAM_SIZE],
+
+            ppu: ppu::PPU::new(),
 
             interrupt_enable: 0,
-            interrupt_flag: 0
+            interrupt_flag: 0,
+
+            dmg_disabled: false,
         }
+    }
+
+    pub fn print_vram(&self) {
+        self.ppu.print_vram()
     }
 
     pub fn read(&self, addr: u16) -> u8 {
         match addr {
+            0x0000...0x00FF if !self.dmg_disabled => DMG_ROM[addr as usize],
             0x0000...0x7FFF => self.mbc.read_rom(addr),
-            0x8000...0x9FFF => panic!("NOT IMPLEMENTED"), /* 8KB Video RAM (VRAM) */
+            0x8000...0x9FFF => self.ppu.read_vram(addr), /* 8KB Video RAM (VRAM) */
             0xA000...0xBFFF => panic!("NOT IMPLEMENTED"), /* 8KB External RAM */
             0xC000...0xDFFF => self.ram[(addr - 0xC000) as usize],   /* 8kB Internal RAM size */
             0xE000...0xFDFF => self.read(addr- 0x2000), /* Same as C000-DDFF (ECHO) */
             0xFE00...0xFE9F => panic!("NOT IMPLEMENTED"), /* Sprite Attribute Table (OAM) */
             0xFEA0...0xFEFF => panic!("NOT IMPLEMENTED"), /* Not Usable */
-            0xFF00...0xFF7F => {
-                /* I/O Ports */
-                match addr {
-                    0xFF00...0xFF02 => panic!("Joypad registers not implemented"),
-                    0xFF04...0xFF07 => panic!("Timer registers not implemented"),
-                    0xFF0F => panic!("Interrupt register not implemented"),
-                    0xFF10...0xFF3F => 0, /* Sound I/O Ports, sound not implemented for now. */
-                    0xFF40...0xFF4B => panic!("GPU Registers not implemented"),
-                    0xFF0F => self.interrupt_flag,
-                    _ => panic!("Illegal I/O port address"),
-                }
-            },
-            0xFF80...0xFFFE => panic!("NOT IMPLEMENTED"), /* High RAM (HRAM) */
+            0xFF00...0xFF7F => self.read_io_port(addr),
+            0xFF80...0xFFFE => self.high_ram[(addr - 0xFF80) as usize], /* High RAM (HRAM) */
             0xFFFF => self.interrupt_enable, /* Interrupt Enable Register */
             _ => panic!("Out of bounds memory access at addr {}", addr),
         }
     }
 
-    pub fn write(&mut self, addr: u16, value: u8) {
+    pub fn read_io_port(&self, addr: u16) -> u8 {
         match addr {
-            0x0000...0x7FFF => self.mbc.write_rom(addr, value),
-            0xC000...0xDFFF => self.ram[(addr - 0xC000) as usize] = value,
-            0xE000...0xFDFF => self.write(addr - 0x2000, value),
-            0xFF00...0xFF7F => {
-                /* I/O Ports */
-                match addr {
-                    0xFF00...0xFF02 => panic!("Joypad registers not implemented"),
-                    0xFF04...0xFF07 => panic!("Timer registers not implemented"),
-                    0xFF0F => self.interrupt_flag = value,
-                    0xFF10...0xFF3F => (), /* Sound I/O Ports, sound not implemented for now. */
-                    0xFF40...0xFF4B => panic!("GPU Registers not implemented"),
-                    _ => panic!("Illegal I/O port address"),
-                }
-            },
-            0xFFFF => self.interrupt_enable = value,
-            _ => panic!("Unimplemented memory access at addr {:4X}", addr),
+            0xFF00...0xFF02 => panic!("Joypad registers not implemented"),
+            0xFF04...0xFF07 => panic!("Timer registers not implemented"),
+            0xFF0F => self.interrupt_flag,
+            0xFF10...0xFF3F => 0, /* Sound I/O Ports, sound not implemented for now. */
+            0xFF40...0xFF4B => self.ppu.read_reg(addr),
+            _ => panic!("Illegal I/O port address"),
         }
     }
 
     pub fn read_wide(&self, addr: u16) -> u16 {
         (self.read(addr + 1) as u16) << 8 | (self.read(addr) as u16)
+    }
+
+    pub fn write(&mut self, addr: u16, value: u8) {
+        match addr {
+            0x0000...0x7FFF => self.mbc.write_rom(addr, value),
+            0x8000...0x9FFF => self.ppu.write_vram(addr, value), /* 8KB Video RAM (VRAM) */
+            0xC000...0xDFFF => self.ram[(addr - 0xC000) as usize] = value,
+            0xE000...0xFDFF => self.write(addr - 0x2000, value),
+            0xFF00...0xFF7F => self.write_io_port(addr, value),
+            0xFF80...0xFFFE => self.high_ram[(addr - 0xFF80) as usize] = value,
+            0xFFFF => self.interrupt_enable = value,
+            _ => panic!("Unimplemented memory access at addr {:4X}", addr),
+        }
+    }
+
+    pub fn write_io_port(&mut self, addr: u16, value: u8) {
+        match addr {
+            0xFF00...0xFF02 => panic!("Joypad registers not implemented"),
+            0xFF04...0xFF07 => panic!("Timer registers not implemented"),
+            0xFF0F => self.interrupt_flag = value,
+            0xFF10...0xFF3F => (), /* Sound I/O Ports, sound not implemented for now. */
+            0xFF40...0xFF4B => self.ppu.write_reg(addr, value),
+            0xFF50 => self.dmg_disabled = value > 0,
+            _ => panic!("Illegal I/O port address"),
+        }
+    }
+
+    pub fn write_wide(&mut self, addr: u16, value: u16) {
+        self.write(addr + 1, (value >> 8) as u8);
+        self.write(addr, value as u8);
     }
 }

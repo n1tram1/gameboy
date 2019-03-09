@@ -38,7 +38,7 @@ pub fn load_cartridge(rom_path: &path::Path) -> Box<MBC> {
     let cartridge_data = fs::read(rom_path).unwrap();
 
     if cartridge_data.len() < 0x150 {
-        panic!("ROM too small, can't even fit header");
+        eprintln!("ROM too small, can't even fit header ({} bytes)", cartridge_data.len());
     } else {
         println!("Loaded cartridge of size {} bytes\n--------------\n", cartridge_data.len());
     }
