@@ -7,7 +7,7 @@ const LCD_WIDTH: usize = 144;
 
 struct LCD {
     window: Window,
-    pixels: [[u32; LCD_BUF_WIDTH]; LCD_BUF_HEIGHT],
+    pixels: [[u32; LCD_WIDTH]; LCD_HEIGHT],
 }
 
 impl LCD {
