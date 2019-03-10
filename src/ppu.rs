@@ -1,5 +1,5 @@
 const VRAM_SIZE: usize = 0x2000;
-const VRAM_START_ADDR = 0x8000;
+const VRAM_START_ADDR: u16 = 0x8000;
 const SCREEN_W: usize = 160;
 const SCREEN_H: usize = 144;
 
