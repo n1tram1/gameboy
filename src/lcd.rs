@@ -2,11 +2,8 @@ extern crate minifb;
 
 use minifb::{Key, Window, WindowOptions};
 
-const VIEWPORT_HEIGHT: usize = 160;
-const VIEWPORT_WIDTH: usize = 144;
-
-const LCD_BUF_HEIGHT: usize = 256;
-const LCD_BUF_WIDTH: usize = 256;
+const LCD_HEIGHT: usize = 160;
+const LCD_WIDTH: usize = 144;
 
 struct LCD {
     window: Window,
