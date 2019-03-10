@@ -1,6 +1,8 @@
 const VRAM_SIZE: usize = 0x2000;
+const VRAM_START_ADDR = 0x8000;
 const SCREEN_W: usize = 160;
 const SCREEN_H: usize = 144;
+
 
 enum PPU_Mode {
     H_Blank,
@@ -55,14 +57,13 @@ impl PPU {
             0xFF49 => self.obp1,
             0xFF4A => self.wy,
             0xFF4B => self.wx,
-            0x8000...0x9FFF => self.read_vram(addr),
-           _ => panic!("Invalid memory access on LCD (addr = {:4X})", addr),
+           _ => panic!("Invalid memory access on PPU register(addr = {:4X})", addr),
         }
     }
 
     pub fn read_vram(&self, addr: u16) -> u8 {
         if self.is_vram_accessible()  {
-            let index = addr - 0x8000;
+            let index = addr - VRAM_START_ADDR;
             self.vram[index as usize]
         } else {
             0xFF
