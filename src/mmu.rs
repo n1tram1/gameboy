@@ -54,6 +54,10 @@ impl MMU {
         }
     }
 
+    pub fn do_cycle(&mut self) {
+        self.ppu.do_cycle()
+    }
+
     pub fn print_vram(&self) {
         self.ppu.print_vram()
     }

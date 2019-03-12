@@ -50,9 +50,6 @@ impl CPU {
     pub fn do_cycle(&mut self) {
 
         if self.should_load_next_instr() {
-            // if self.registers.pc >= 0x95 && self.registers.pc <= 0xa3 {
-            //     self.debug_dump();
-            // }
             let op = self.fetch_next_opcode();
 
             println!(
@@ -72,6 +69,9 @@ impl CPU {
             /* TODO: do something with timing */
             self.cycles_remaining -= 1;
         }
+
+        // /* TODO: the ppu shouldn't cycle as fast as the cpu */
+        // self.mmu.do_cycle();
     }
 
     fn should_load_next_instr(&self) -> bool {
@@ -185,7 +185,8 @@ impl CPU {
             }
             0x1A => {
                 /* LD A,(DE) */
-                self.registers.a = self.mmu.read(self.registers.get_de());
+                let val = self.mmu.read(self.registers.get_de());
+                self.registers.a = val;
 
                 8
             }
@@ -495,6 +496,7 @@ impl CPU {
             }
             _ => {
                 // self.mmu.print_vram();
+                self.mmu.do_cycle();
                 self.debug_dump();
                 panic!(
                     "Unimplemented instructions (opcode = {:2X}) at pc = {:4X}",
@@ -663,13 +665,14 @@ impl CPU {
     }
 
     fn alu8_rl(&mut self, n: u8) -> u8 {
-        let carry = n & 0x80 == 0x80;
-        let res = n.rotate_left(1);
+        let old_carry = if self.registers.get_flag(CpuFlag::C) { 1 } else { 0 };
+        let new_carry = n & 0x80 == 0x80;
+        let res = ((n << 1) & !0b1) | old_carry;
 
         self.registers.set_flag(CpuFlag::Z, res == 0);
         self.registers.set_flag(CpuFlag::N, false);
         self.registers.set_flag(CpuFlag::H, false);
-        self.registers.set_flag(CpuFlag::C, carry);
+        self.registers.set_flag(CpuFlag::C, new_carry);
 
         res
     }
