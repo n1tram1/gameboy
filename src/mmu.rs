@@ -58,10 +58,6 @@ impl MMU {
         self.ppu.do_cycle()
     }
 
-    pub fn print_vram(&self) {
-        self.ppu.print_vram()
-    }
-
     pub fn read(&self, addr: u16) -> u8 {
         match addr {
             0x0000...0x00FF if !self.dmg_disabled => DMG_ROM[addr as usize],
