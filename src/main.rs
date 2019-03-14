@@ -24,21 +24,21 @@ fn main() {
         cpu.do_cycle();
 
 
-        // if cycles_count > 4 * 10u32.pow(0) {
-        //     println!("elapsed {}ms", start.elapsed().as_micros());
+        if cycles_count > 4 * 10u32.pow(0) {
+            println!("elapsed {}ms", start.elapsed().as_micros());
 
 
-        //     let diff = Instant::now().duration_since(prev);
-        //     if diff > one_sec {
-        //         println!("running late");
-        //     } else {
-        //         let remaining = one_sec - diff;
-        //         sleep(remaining);
-        //     }
+            let diff = Instant::now().duration_since(prev);
+            if diff > one_sec {
+                println!("running late");
+            } else {
+                let remaining = one_sec - diff;
+                sleep(remaining);
+            }
 
 
-        //     prev =  Instant::now();
-        //     cycles_count = 0;
-        // }
+            prev =  Instant::now();
+            cycles_count = 0;
+        }
     }
 }
