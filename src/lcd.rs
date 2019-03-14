@@ -5,6 +5,8 @@ use minifb::{Key, Window, WindowOptions};
 const LCD_HEIGHT: usize = 160;
 const LCD_WIDTH: usize = 144;
 
+const WHITE: u32 = 0x00FFFFFF;
+
 pub struct LCD {
     width: usize,
     height: usize,
@@ -26,12 +28,16 @@ impl LCD {
             ).unwrap(),
         };
 
-        for n in lcd.pixels.iter_mut() {
-            *n = 0x00FFFFFF;
-        }
+        lcd.reset();
         lcd.update();
 
         lcd
+    }
+
+    pub fn reset(&mut self) {
+        for n in self.pixels.iter_mut() {
+            *n = WHITE;
+        }
     }
 
     pub fn set_pixel(&mut self, x: usize, y: usize, val: u32) {
