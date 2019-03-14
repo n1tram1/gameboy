@@ -41,16 +41,16 @@ impl PPU {
     pub fn new() -> PPU {
         PPU {
             lcdc: 0x00,
-            stat: 0x00, /* TODO: find init val of this registers. */
-            scy: 0x00,
-            scx: 0x00,
-            ly: 0x00,
-            lyc: 0x00,
-            bgp: 0xFC,
-            obp0: 0xFF,
-            obp1: 0xFF,
-            wy: 0x00,
-            wx: 0x00,
+            stat: 0x00,
+            scy:  0x00,
+            scx:  0x00,
+            ly:   0x00,
+            lyc:  0x00,
+            bgp:  0x00,
+            obp0: 0x00,
+            obp1: 0x00,
+            wy:   0x00,
+            wx:   0x00,
             vram: [0; VRAM_SIZE],
 
             lcd: LCD::new(SCREEN_W, SCREEN_H),
