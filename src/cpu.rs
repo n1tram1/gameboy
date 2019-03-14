@@ -48,8 +48,11 @@ impl CPU {
     }
 
     pub fn do_cycle(&mut self) {
-
         if self.should_load_next_instr() {
+            if self.registers.pc >= 0x40 && self.registers.pc <= 0x53 {
+                let a = 0;
+            }
+
             let op = self.fetch_next_opcode();
 
             println!(
@@ -71,7 +74,7 @@ impl CPU {
         }
 
         // /* TODO: the ppu shouldn't cycle as fast as the cpu */
-        // self.mmu.do_cycle();
+        self.mmu.do_cycle();
     }
 
     fn should_load_next_instr(&self) -> bool {
@@ -170,6 +173,12 @@ impl CPU {
 
                 4
             },
+            0x16 => {
+                /* LD D,d8 */
+                self.registers.d = self.fetch_imm8();
+
+                8
+            }
             0x17 => {
                 /* RLA A */
                 self.registers.a = self.alu8_rl(self.registers.a);
@@ -196,11 +205,17 @@ impl CPU {
 
                 4
             }
-            0x1E => {
+            0x1D => {
                 /* DEC E */
-                self.registers.e = self.alu8_dec(self.registers.e);
+                self.registers.e -= 1;
 
                 4
+            }
+            0x1E => {
+                /* LD E, d8 */
+                self.registers.e = self.fetch_imm8();
+
+                8
             }
             0x1F => {
                 /* RRA */
@@ -331,6 +346,18 @@ impl CPU {
 
                 4
             }
+            0x57 => {
+                /* LD D,A */
+                self.registers.d = self.registers.a;
+
+                4
+            }
+            0x67 => {
+                /* LD H,A */
+                self.registers.h = self.registers.a;
+
+                4
+            }
             0x77 => {
                 /* LD (HL),A */
                 self.mmu.write(self.registers.get_hl(), self.registers.a);
@@ -340,6 +367,18 @@ impl CPU {
             0x7B => {
                 /* LD A, E */
                 self.registers.a = self.registers.e;
+
+                4
+            }
+            0x7C => {
+                /* LD A,H */
+                self.registers.a = self.registers.h;
+
+                4
+            }
+            0x90 => {
+                /* SUB B */
+                self.registers.a = self.alu8_sub(self.registers.a, self.registers.b);
 
                 4
             }
