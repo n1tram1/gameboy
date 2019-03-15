@@ -8,13 +8,14 @@ const BG_TILEDATA_SZ: usize = 0x1000;
 
 const TILE_SZ: usize = 16;
 
+use crate::palette::Palette;
 use crate::lcd::LCD;
 
 #[derive(Debug)]
-enum LCD_Mode {
-    H_Blank,
-    V_Blank,
-    OAM_Search,
+enum LCDMode {
+    HBlank,
+    VBlank,
+    OAMSearch,
     Transfer,
 }
 
@@ -25,7 +26,7 @@ pub struct PPU {
     scx: u8,
     ly: u8,
     lyc: u8,
-    bgp: u8,
+    bgp: Palette,
     obp0: u8,
     obp1: u8,
     wy: u8,
@@ -46,7 +47,7 @@ impl PPU {
             scx:  0x00,
             ly:   0x00,
             lyc:  0x00,
-            bgp:  0x00,
+            bgp:  Palette::new(0),
             obp0: 0x00,
             obp1: 0x00,
             wy:   0x00,
@@ -67,7 +68,7 @@ impl PPU {
             0xFF43 => self.scx,
             0xFF44 => self.ly,
             0xFF45 => self.lyc,
-            0xFF47 => self.bgp,
+            0xFF47 => self.bgp.register,
             0xFF48 => self.obp0,
             0xFF49 => self.obp1,
             0xFF4A => self.wy,
@@ -92,16 +93,6 @@ impl PPU {
         }
     }
 
-    fn is_vram_accessible(&self) -> bool {
-        let mode = self.get_mode();
-
-        !self.is_lcd_enabled()
-            | match mode {
-                LCD_Mode::H_Blank | LCD_Mode::V_Blank => true,
-                _ => false,
-            }
-    }
-
     pub fn write_reg(&mut self, addr: u16, val: u8) {
         println!("writing to PPU register");
         match addr {
@@ -111,13 +102,31 @@ impl PPU {
             0xFF43 => self.scx = val,
             0xFF44 => self.ly = val,
             0xFF45 => self.lyc = val,
-            0xFF47 => self.bgp = val,
+            0xFF47 => self.bgp = Palette::new(val),
             0xFF48 => self.obp0 = val,
             0xFF49 => self.obp1 = val,
             0xFF4A => self.wy = val,
             0xFF4B => self.wx = val,
             _ => panic!("Invalid memory access on LCD (addr = {:4X})", addr),
         }
+    }
+
+    fn is_vram_accessible(&self) -> bool {
+        let mode = self.get_mode();
+
+        !self.is_lcd_enabled()
+            | match mode {
+                LCDMode::HBlank | LCDMode::VBlank => true,
+                _ => false,
+            }
+    }
+
+    fn is_lcd_enabled(&self) -> bool {
+        self.lcdc & (1 << 7) > 0
+    }
+
+    fn is_bg_enabled(&self) -> bool {
+        self.lcdc & 1 > 0
     }
 
     pub fn do_cycle(&mut self) {
@@ -131,35 +140,35 @@ impl PPU {
         }
 
         match self.get_mode() {
-            LCD_Mode::OAM_Search => {
+            LCDMode::OAMSearch => {
                 /* TODO: implement OAM */
 
                 /* Just transition into VRAM Transfer. */
-                self.set_mode(LCD_Mode::Transfer);
+                self.set_mode(LCDMode::Transfer);
 
                 self.cycles_remaining +=  80;
             },
-            LCD_Mode::Transfer   => {
-                self.render_line();
-                self.set_mode(LCD_Mode::H_Blank);
+            LCDMode::Transfer   => {
+                self.render_bg_line();
+                self.set_mode(LCDMode::HBlank);
 
                 self.cycles_remaining += 172;
             },
-            LCD_Mode::H_Blank    => {
+            LCDMode::HBlank    => {
                 if self.ly == 143 {
-                    self.set_mode(LCD_Mode::V_Blank);
+                    self.set_mode(LCDMode::VBlank);
                 } else {
-                    self.set_mode(LCD_Mode::OAM_Search);
+                    self.set_mode(LCDMode::OAMSearch);
                 }
 
                 self.ly += 1;
                 self.cycles_remaining += 204;
             },
-            LCD_Mode::V_Blank    => {
+            LCDMode::VBlank    => {
                 if self.ly > 153 {
                     self.lcd.update();
                     self.ly = 0;
-                    self.set_mode(LCD_Mode::OAM_Search);
+                    self.set_mode(LCDMode::OAMSearch);
                 } else {
                     self.ly += 1;
                 }
@@ -169,8 +178,33 @@ impl PPU {
         }
     }
 
-    fn render_line(&mut self) {
-        let tile_row = ((self.scy + self.ly) / 8) as usize;
+    fn get_mode(&self) -> LCDMode {
+        match self.stat & 0b11 {
+            0 => LCDMode::HBlank,
+            1 => LCDMode::VBlank,
+            2 => LCDMode::OAMSearch,
+            3 => LCDMode::Transfer,
+            _ => panic!("Impossible LCDMode reached WTF !"),
+        }
+    }
+
+    fn set_mode(&mut self, mode: LCDMode) {
+        /* Clear mode bits. */
+        self.stat &= !0b11;
+
+        self.stat |= match mode {
+            LCDMode::HBlank => 0,
+            LCDMode::VBlank => 1,
+            LCDMode::OAMSearch => 2,
+            LCDMode::Transfer => 3,
+        };
+    }
+
+
+    fn render_bg_line(&mut self) {
+        // let (tile_row, _) = self.scy.overflowing_add(self.ly);
+        let (tile_row, _) = self.scy.overflowing_add(self.ly);
+        let tile_row = (tile_row / 8) as usize;
         let mut tile_col = (self.scx / 8) as usize;
         let mut tiledata = self.fetch_tile(tile_row, tile_col);
 
@@ -180,12 +214,9 @@ impl PPU {
         for n in 0..160 {
             let lsb = if (tiledata[y] & ( 1 << (7 - x))) > 0 { 1 } else { 0 };
             let msb = if (tiledata[y + 1] & (1 << (7 - x))) > 0 { 2 } else { 0 };
-            let color = match lsb + msb {
-                0 => 0xffffff,
-                _ => 0,
-            };
+            let color = self.bgp.to_argb(lsb + msb);
 
-            self.lcd.set_pixel(n, self.ly as usize, color);
+            self.lcd.set_pixel(n, self.ly as usize, color as u32);
 
             x += 1;
             if x == 8 {
@@ -197,38 +228,16 @@ impl PPU {
     }
 
     fn fetch_tile(&self, col: usize, row: usize) -> Vec<u8> {
-        let mapoff = col + row * 32 + self.bg_tilemap_addr() as usize - VRAM_START_ADDR as usize;
-        let tiledata_off = (self.vram[mapoff] as usize * 16) + self.tiledata_addr() as usize - VRAM_START_ADDR as usize;
+        if self.is_bg_enabled() {
+            let mapoff = col + row * 32 + self.bg_tilemap_addr() as usize - VRAM_START_ADDR as usize;
+            let tiledata_off = (self.vram[mapoff] as usize * 16) + self.tiledata_addr() as usize - VRAM_START_ADDR as usize;
 
-        (&self.vram[tiledata_off..tiledata_off + TILE_SZ]).iter()
+            (&self.vram[tiledata_off..tiledata_off + TILE_SZ]).iter()
                                                           .map(|&b| b)
                                                           .collect()
-    }
-
-    fn is_lcd_enabled(&self) -> bool {
-        self.lcdc & (1 << 7) > 0
-    }
-
-    fn get_mode(&self) -> LCD_Mode {
-        match self.stat & 0b11 {
-            0 => LCD_Mode::H_Blank,
-            1 => LCD_Mode::V_Blank,
-            2 => LCD_Mode::OAM_Search,
-            3 => LCD_Mode::Transfer,
-            _ => panic!("Impossible LCD_Mode reached WTF !"),
+        } else {
+            vec![0; TILE_SZ]
         }
-    }
-
-    fn set_mode(&mut self, mode: LCD_Mode) {
-        /* Clear mode bits. */
-        self.stat &= !0b11;
-
-        self.stat |= match mode {
-            LCD_Mode::H_Blank => 0,
-            LCD_Mode::V_Blank => 1,
-            LCD_Mode::OAM_Search => 2,
-            LCD_Mode::Transfer => 3,
-        };
     }
 
     fn bg_tilemap_addr(&self) -> u16 {

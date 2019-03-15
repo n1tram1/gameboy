@@ -7,10 +7,10 @@ const LCD_WIDTH: usize = 144;
 
 /* Colors encoded using ARGB format */
 pub enum Colors {
-    Black      = 0x00_00_00_00,
-    White      = 0x00_FF_FF_FF,
-    LightGray  = 0x00_D3_D3_D3,
-    DarkGray   = 0x00_A9_A9_A9,
+    Black     = 0x00_00_00_00,
+    White     = 0x00_FF_FF_FF,
+    LightGray = 0x00_D3_D3_D3,
+    DarkGray  = 0x00_A9_A9_A9,
 }
 
 pub struct LCD {
