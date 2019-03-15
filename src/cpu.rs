@@ -49,10 +49,6 @@ impl CPU {
 
     pub fn do_cycle(&mut self) {
         if self.should_load_next_instr() {
-            if self.registers.pc >= 0x40 && self.registers.pc <= 0x53 {
-                let a = 0;
-            }
-
             let op = self.fetch_next_opcode();
 
             println!(
@@ -611,6 +607,17 @@ impl CPU {
     }
 
     fn alu8_sub(&mut self, a: u8, b: u8) -> u8 {
+        let (res, overflow) = a.overflowing_sub(b);
+
+        self.registers.set_flag(CpuFlag::Z, res == 0);
+        self.registers.set_flag(CpuFlag::N, true);
+        self.registers.set_flag(CpuFlag::H, (res & (1 << 4)) > 0); /* TODO: test H flag, it might be very broken */
+        self.registers.set_flag(CpuFlag::C, overflow);
+
+        res
+    }
+
+    fn alu8_sub_with_borrow(&mut self, a: u8, b: u8) -> u8 {
         let carry = match self.registers.get_flag(CpuFlag::C) {
             true => 1,
             false => 0,
