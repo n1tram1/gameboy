@@ -5,7 +5,13 @@ use minifb::{Key, Window, WindowOptions};
 const LCD_HEIGHT: usize = 160;
 const LCD_WIDTH: usize = 144;
 
-const WHITE: u32 = 0x00FFFFFF;
+/* Colors encoded using ARGB format */
+pub enum Colors {
+    Black      = 0x00_00_00_00,
+    White      = 0x00_FF_FF_FF,
+    LightGray  = 0x00_D3_D3_D3,
+    DarkGray   = 0x00_A9_A9_A9,
+}
 
 pub struct LCD {
     width: usize,
@@ -36,7 +42,7 @@ impl LCD {
 
     pub fn reset(&mut self) {
         for n in self.pixels.iter_mut() {
-            *n = WHITE;
+            *n = Colors::White as u32;
         }
     }
 
@@ -49,6 +55,10 @@ impl LCD {
     }
 
     pub fn run_until_escape(&self) {
-        while self.window.is_open() && !self.window.is_key_down(Key::Escape) {}
+        while self.window.is_open() {
+            if self.window.is_key_down(Key::Escape) {
+                break;
+            }
+        }
     }
 }
