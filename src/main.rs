@@ -9,6 +9,7 @@ mod registers;
 mod ppu;
 mod decode;
 mod lcd;
+mod palette;
 
 fn main() {
     let start = Instant::now();
