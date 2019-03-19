@@ -1,3 +1,7 @@
+use std::collections::HashMap;
+use crate::palette::Palette;
+use crate::lcd::LCD;
+
 const VRAM_SIZE: usize = 0x2000;
 const VRAM_START_ADDR: u16 = 0x8000;
 const SCREEN_W: usize = 160;
@@ -8,8 +12,9 @@ const BG_TILEDATA_SZ: usize = 0x1000;
 
 const TILE_SZ: usize = 16;
 
-use crate::palette::Palette;
-use crate::lcd::LCD;
+struct Cacher {
+    tiles: HashMap<(u32, u32), Vec<u8>>,
+}
 
 #[derive(Debug)]
 enum LCDMode {
@@ -36,6 +41,8 @@ pub struct PPU {
     lcd: LCD,
 
     cycles_remaining: usize,
+
+    tiles_cache: HashMap<(u32, u32), Vec<u8>>,
 }
 
 impl PPU {
@@ -57,77 +64,78 @@ impl PPU {
             lcd: LCD::new(SCREEN_W, SCREEN_H),
 
             cycles_remaining: 0,
+
+            tiles_cache: HashMap::new(),
+    }
+}
+
+pub fn read_reg(&self, addr: u16) -> u8 {
+    match addr {
+        0xFF40 => self.lcdc,
+        0xFF41 => self.stat,
+        0xFF42 => self.scy,
+        0xFF43 => self.scx,
+        0xFF44 => self.ly,
+        0xFF45 => self.lyc,
+        0xFF47 => self.bgp.register,
+        0xFF48 => self.obp0,
+        0xFF49 => self.obp1,
+        0xFF4A => self.wy,
+        0xFF4B => self.wx,
+        _ => panic!("Invalid memory access on PPU register(addr = {:4X})", addr),
+    }
+}
+
+pub fn read_vram(&self, addr: u16) -> u8 {
+    if self.is_vram_accessible() {
+        let index = addr - VRAM_START_ADDR;
+        self.vram[index as usize]
+    } else {
+        0xFF
+    }
+}
+
+pub fn write_vram(&mut self, addr: u16, val: u8) {
+    if self.is_vram_accessible() {
+        let index = addr - 0x8000;
+        self.vram[index as usize] = val;
+    }
+}
+
+pub fn write_reg(&mut self, addr: u16, val: u8) {
+    match addr {
+        0xFF40 => self.lcdc = val,
+        0xFF41 => self.stat = val,
+        0xFF42 => self.scy = val,
+        0xFF43 => self.scx = val,
+        0xFF44 => self.ly = val,
+        0xFF45 => self.lyc = val,
+        0xFF47 => self.bgp = Palette::new(val),
+        0xFF48 => self.obp0 = val,
+        0xFF49 => self.obp1 = val,
+        0xFF4A => self.wy = val,
+        0xFF4B => self.wx = val,
+        _ => panic!("Invalid memory access on LCD (addr = {:4X})", addr),
+    }
+}
+
+fn is_vram_accessible(&self) -> bool {
+    let mode = self.get_mode();
+
+    !self.is_lcd_enabled()
+        | match mode {
+            LCDMode::HBlank | LCDMode::VBlank => true,
+            _ => false,
         }
-    }
+}
 
-    pub fn read_reg(&self, addr: u16) -> u8 {
-        match addr {
-            0xFF40 => self.lcdc,
-            0xFF41 => self.stat,
-            0xFF42 => self.scy,
-            0xFF43 => self.scx,
-            0xFF44 => self.ly,
-            0xFF45 => self.lyc,
-            0xFF47 => self.bgp.register,
-            0xFF48 => self.obp0,
-            0xFF49 => self.obp1,
-            0xFF4A => self.wy,
-            0xFF4B => self.wx,
-            _ => panic!("Invalid memory access on PPU register(addr = {:4X})", addr),
-        }
-    }
+fn is_lcd_enabled(&self) -> bool {
+    self.lcdc & (1 << 7) > 0
+}
 
-    pub fn read_vram(&self, addr: u16) -> u8 {
-        if self.is_vram_accessible() {
-            let index = addr - VRAM_START_ADDR;
-            self.vram[index as usize]
-        } else {
-            0xFF
-        }
-    }
-
-    pub fn write_vram(&mut self, addr: u16, val: u8) {
-        if self.is_vram_accessible() {
-            let index = addr - 0x8000;
-            self.vram[index as usize] = val;
-        }
-    }
-
-    pub fn write_reg(&mut self, addr: u16, val: u8) {
-        println!("writing to PPU register");
-        match addr {
-            0xFF40 => self.lcdc = val,
-            0xFF41 => self.stat = val,
-            0xFF42 => self.scy = val,
-            0xFF43 => self.scx = val,
-            0xFF44 => self.ly = val,
-            0xFF45 => self.lyc = val,
-            0xFF47 => self.bgp = Palette::new(val),
-            0xFF48 => self.obp0 = val,
-            0xFF49 => self.obp1 = val,
-            0xFF4A => self.wy = val,
-            0xFF4B => self.wx = val,
-            _ => panic!("Invalid memory access on LCD (addr = {:4X})", addr),
-        }
-    }
-
-    fn is_vram_accessible(&self) -> bool {
-        let mode = self.get_mode();
-
-        !self.is_lcd_enabled()
-            | match mode {
-                LCDMode::HBlank | LCDMode::VBlank => true,
-                _ => false,
-            }
-    }
-
-    fn is_lcd_enabled(&self) -> bool {
-        self.lcdc & (1 << 7) > 0
-    }
-
-    fn is_bg_enabled(&self) -> bool {
-        self.lcdc & 1 > 0
-    }
+fn is_bg_enabled(&self) -> bool {
+    self.lcdc & 1 > 0
+}
 
     pub fn do_cycle(&mut self) {
         if !self.is_lcd_enabled() {
@@ -206,37 +214,38 @@ impl PPU {
         let (tile_row, _) = self.scy.overflowing_add(self.ly);
         let tile_row = (tile_row / 8) as usize;
         let mut tile_col = (self.scx / 8) as usize;
+
         let mut tiledata = self.fetch_tile(tile_row, tile_col);
 
         let mut x = self.scx % 8;
         let y = ((self.scy + self.ly) % 8) as usize * 2;
 
         for n in 0..160 {
-            let lsb = if (tiledata[y] & ( 1 << (7 - x))) > 0 { 1 } else { 0 };
-            let msb = if (tiledata[y + 1] & (1 << (7 - x))) > 0 { 2 } else { 0 };
-            let color = self.bgp.to_argb(lsb + msb);
+            unsafe {
+                let lsb = if ((*tiledata)[y] & ( 1 << (7 - x))) > 0 { 1 } else { 0 };
+                let msb = if ((*tiledata)[y + 1] & (1 << (7 - x))) > 0 { 2 } else { 0 };
+                let color = self.bgp.to_argb(lsb + msb);
 
-            self.lcd.set_pixel(n, self.ly as usize, color as u32);
+                self.lcd.set_pixel(n, self.ly as usize, color as u32);
 
-            x += 1;
-            if x == 8 {
-                x = 0;
-                tile_col += 1;
-                tiledata = self.fetch_tile(tile_col, tile_row);
+                x += 1;
+                if x == 8 {
+                    x = 0;
+                    tile_col += 1;
+                    tiledata = self.fetch_tile(tile_col, tile_row);
+                }
             }
         }
     }
 
-    fn fetch_tile(&self, col: usize, row: usize) -> Vec<u8> {
+    fn fetch_tile(&self, col: usize, row: usize) -> *const [u8] {
         if self.is_bg_enabled() {
             let mapoff = col + row * 32 + self.bg_tilemap_addr() as usize - VRAM_START_ADDR as usize;
             let tiledata_off = (self.vram[mapoff] as usize * 16) + self.tiledata_addr() as usize - VRAM_START_ADDR as usize;
 
-            (&self.vram[tiledata_off..tiledata_off + TILE_SZ]).iter()
-                                                          .map(|&b| b)
-                                                          .collect()
+            &self.vram[tiledata_off..tiledata_off + TILE_SZ]
         } else {
-            vec![0; TILE_SZ]
+            &[0; TILE_SZ]
         }
     }
 
