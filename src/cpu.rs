@@ -81,20 +81,6 @@ impl CPU {
         self.mmu.read(self.registers.pc)
     }
 
-    fn fetch_imm8(&mut self) -> u8 {
-        let byte = self.mmu.read(self.registers.pc);
-        self.registers.pc += 1;
-
-        byte
-    }
-
-    fn fetch_imm16(&mut self) -> u16 {
-        let word = self.mmu.read_wide(self.registers.pc);
-        self.registers.pc += 2;
-
-        word
-    }
-
     fn execute_instruction(&mut self, opcode: u8) -> u8 {
         match opcode {
             0x00 => {
@@ -561,6 +547,20 @@ impl CPU {
             }
             _ => panic!("Unimplemented CB instruction {:2X}", instr),
         }
+    }
+
+    fn fetch_imm8(&mut self) -> u8 {
+        let byte = self.mmu.read(self.registers.pc);
+        self.registers.pc += 1;
+
+        byte
+    }
+
+    fn fetch_imm16(&mut self) -> u16 {
+        let word = self.mmu.read_wide(self.registers.pc);
+        self.registers.pc += 2;
+
+        word
     }
 
     fn calc_rel_addr(addr: u16, r8: i8) -> u16 {
