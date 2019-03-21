@@ -2,6 +2,7 @@ use std::path;
 
 use crate::mbc;
 use crate::ppu;
+use crate::joypad;
 
 const DMG_ROM_SIZE: usize = 0x100;
 const DMG_ROM: [u8; DMG_ROM_SIZE] = [
@@ -32,6 +33,7 @@ pub struct MMU {
     ram: [u8; INTERNAL_RAM_SIZE],
     high_ram: [u8; HIGH_RAM_SIZE],
     ppu: ppu::PPU,
+    joypad: joypad::Joypad,
 
     interrupt_enable: u8,
     interrupt_flag: u8,
@@ -47,6 +49,8 @@ impl MMU {
 
             ppu: ppu::PPU::new(),
 
+            joypad: joypad::Joypad::new(),
+
             interrupt_enable: 0,
             interrupt_flag: 0,
 
@@ -55,7 +59,9 @@ impl MMU {
     }
 
     pub fn do_cycle(&mut self) {
-        self.ppu.do_cycle()
+        self.ppu.do_cycle();
+
+        // self.joypad.do_cycle(self.ppu.get_lcd_ref());
     }
 
     pub fn read(&self, addr: u16) -> u8 {
@@ -67,7 +73,7 @@ impl MMU {
             0xC000...0xDFFF => self.ram[(addr - 0xC000) as usize],   /* 8kB Internal RAM size */
             0xE000...0xFDFF => self.read(addr- 0x2000), /* Same as C000-DDFF (ECHO) */
             0xFE00...0xFE9F => panic!("NOT IMPLEMENTED"), /* Sprite Attribute Table (OAM) */
-            0xFEA0...0xFEFF => panic!("NOT IMPLEMENTED"), /* Not Usable */
+            0xFEA0...0xFEFF => 0, /* Not Usable */
             0xFF00...0xFF7F => self.read_io_port(addr),
             0xFF80...0xFFFE => self.high_ram[(addr - 0xFF80) as usize], /* High RAM (HRAM) */
             0xFFFF => self.interrupt_enable, /* Interrupt Enable Register */
@@ -77,7 +83,8 @@ impl MMU {
 
     pub fn read_io_port(&self, addr: u16) -> u8 {
         match addr {
-            0xFF00...0xFF02 => panic!("Joypad registers not implemented"),
+            0xFF00 => self.joypad.read(),
+            0xFF01...0xFF02 => { eprintln!("Serial Data Transfer registers not implemented"); 0 },
             0xFF04...0xFF07 => panic!("Timer registers not implemented"),
             0xFF0F => self.interrupt_flag,
             0xFF10...0xFF3F => 0, /* Sound I/O Ports, sound not implemented for now. */
@@ -98,6 +105,7 @@ impl MMU {
             0xE000...0xFDFF => self.write(addr - 0x2000, value),
             0xFF00...0xFF7F => self.write_io_port(addr, value),
             0xFF80...0xFFFE => self.high_ram[(addr - 0xFF80) as usize] = value,
+            0xFEA0...0xFFEF => {},
             0xFFFF => self.interrupt_enable = value,
             _ => panic!("Unimplemented memory access at addr {:4X}", addr),
         }
@@ -105,7 +113,8 @@ impl MMU {
 
     pub fn write_io_port(&mut self, addr: u16, value: u8) {
         match addr {
-            0xFF00...0xFF02 => panic!("Joypad registers not implemented"),
+            0xFF00 => self.joypad.write(value),
+            0xFF01...0xFF02 => eprintln!("Serial Data Transfer registers not implemented"),
             0xFF04...0xFF07 => panic!("Timer registers not implemented"),
             0xFF0F => self.interrupt_flag = value,
             0xFF10...0xFF3F => (), /* Sound I/O Ports, sound not implemented for now. */
