@@ -88,18 +88,24 @@ pub fn decode_instruction(opcode: u8, mmu: &MMU, regs: &Registers) -> String {
         }
         0x32 => {
             String::from(format!("LD [HL-] (HL = {:4X}), A (A = {:2X})", regs.get_hl(), regs.a))
-        },
+        }
+        0x36 => {
+            String::from(format!("LD (HL),{:2X}", mmu.read(regs.pc + 1)))
+        }
         0x3E => {
             String::from(format!("LD A, {:2X}", mmu.read(regs.pc + 1)))
         }
         0x3D => {
             String::from("DEC A")
         }
-        0x57 => {
-            String::from("LD D,A")
+        0x04 => {
+            String::from("INC B")
         }
         0x4F => {
             String::from("LD C,A")
+        }
+        0x57 => {
+            String::from("LD D,A")
         }
         0x67 => {
             String::from("LD H,A")
@@ -107,11 +113,20 @@ pub fn decode_instruction(opcode: u8, mmu: &MMU, regs: &Registers) -> String {
         0x77 => {
             String::from("LD (HL),A")
         }
+        0x78 => {
+            String::from("LD A,B")
+        }
         0x7B => {
             String::from("LD A, E")
         }
         0x7C => {
             String::from("LD A,H")
+        }
+        0x7D => {
+            String::from("LD A,L")
+        }
+        0x86 => {
+            String::from("ADD A, (HL)")
         }
         0x90 => {
             String::from("SUB B")
@@ -143,6 +158,9 @@ pub fn decode_instruction(opcode: u8, mmu: &MMU, regs: &Registers) -> String {
         }
         0xB7 => {
             String::from("OR A")
+        }
+        0xBE => {
+            String::from("CP (HL)")
         }
         0xBF => {
             String::from("CP A")

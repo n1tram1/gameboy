@@ -316,6 +316,13 @@ impl CPU {
 
                 4
             }
+            0x36 => {
+                /* LD (HL),d8 */
+                let d8 = self.fetch_imm8();
+                self.mmu.write(self.registers.get_hl(), d8);
+
+                12
+            }
             0x3E => {
                 /* LD A,d8 */
                 self.registers.a = self.fetch_imm8();
@@ -346,9 +353,21 @@ impl CPU {
 
                 8
             }
+            0x78 => {
+                /* LD A,B */
+                self.registers.a = self.registers.b;
+
+                4
+            }
             0x7B => {
                 /* LD A, E */
                 self.registers.a = self.registers.e;
+
+                4
+            }
+            0x7D => {
+                /* LD A,L */
+                self.registers.a = self.registers.l;
 
                 4
             }
@@ -357,6 +376,12 @@ impl CPU {
                 self.registers.a = self.registers.h;
 
                 4
+            }
+            0x86 => {
+                /* ADD A,(HL) */
+                self.registers. a = self.alu8_add(self.registers.a, self.mmu.read(self.registers.get_hl()));
+
+                8
             }
             0x90 => {
                 /* SUB B */
@@ -418,6 +443,12 @@ impl CPU {
                 self.registers.a = self.alu8_or(self.registers.a, self.registers.a);
 
                 4
+            }
+            0xBE => {
+                /* CP (HL) */
+                self.alu8_cp(self.registers.a, self.mmu.read(self.registers.get_hl()));
+
+                8
             }
             0xBF => {
                 /* CP A */
