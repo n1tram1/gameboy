@@ -1,6 +1,7 @@
 extern crate minifb;
 
 use minifb::{Key, Window, WindowOptions};
+use crate::joypad;
 
 const LCD_HEIGHT: usize = 160;
 const LCD_WIDTH: usize = 144;
@@ -60,5 +61,20 @@ impl LCD {
                 break;
             }
         }
+    }
+
+    pub fn get_key(&self, key: joypad::Keys) -> bool {
+        let minifb_key = match key {
+            joypad::Keys::A => Key::W,
+            joypad::Keys::B => Key::Q,
+            joypad::Keys::Select => Key::A,
+            joypad::Keys::Start => Key::S,
+            joypad::Keys::Left => Key::Left,
+            joypad::Keys::Right => Key::Right,
+            joypad::Keys::Up => Key::Up,
+            joypad::Keys::Down => Key::Down,
+        };
+
+        self.window.is_key_down(minifb_key)
     }
 }
