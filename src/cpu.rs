@@ -49,6 +49,13 @@ impl CPU {
 
     pub fn do_cycle(&mut self) {
         if self.should_load_next_instr() {
+            if self.mmu.is_dmg_disabled() {
+                if self.registers.pc == 0x40 {
+                eprintln!("Breakpoint at 0x40");
+                loop {}
+                }
+            }
+
             let op = self.fetch_next_opcode();
 
             println!(
@@ -87,6 +94,13 @@ impl CPU {
                 /* NOP */
                 4
             }
+            0x01 => {
+                /* LD BC,d16 */
+                let d16 = self.fetch_imm16();
+                self.registers.set_bc(d16);
+
+                12
+            }
             0x02 => {
                 /* LD (BC), A */
                 let addr = self.registers.get_bc();
@@ -111,7 +125,14 @@ impl CPU {
                 self.registers.b = self.fetch_imm8();
 
                 8
-            },
+            }
+            0x0B => {
+                /* DEC BC */
+                let bc = self.registers.get_bc();
+                self.registers.set_bc(bc - 1);
+
+                8
+            }
             0x0C => {
                 /* INC C */
                 self.registers.c = self.alu8_inc(self.registers.c);
@@ -173,6 +194,13 @@ impl CPU {
                 self.registers.pc = CPU::calc_rel_addr(self.registers.pc, r8);
 
                 12
+            }
+            0x19 => {
+                /* ADD HL,DE */
+                let res = self.alu16_add(self.registers.get_hl(), self.registers.get_de());
+                self.registers.set_hl(res);
+
+                8
             }
             0x1A => {
                 /* LD A,(DE) */
@@ -271,6 +299,14 @@ impl CPU {
                     8
                 }
             }
+            0x2A => {
+                /* LD A,(HL+) */
+                let hl = self.registers.get_hl();
+                self.registers.a = self.mmu.read(hl);
+                self.registers.set_hl(hl + 1);
+
+                8
+            }
             0x2C => {
                 /* INC L */
                 self.registers.l = self.alu8_inc(self.registers.l);
@@ -288,6 +324,15 @@ impl CPU {
                 self.registers.l = self.fetch_imm8();
 
                 8
+            }
+            0x2F => {
+                /* CPL */
+                self.registers.a = !self.registers.a;
+
+                self.registers.set_flag(CpuFlag::N, true);
+                self.registers.set_flag(CpuFlag::H, true);
+
+                4
             }
             0x31 => {
                 /* LD SP, d16 */
@@ -329,15 +374,40 @@ impl CPU {
 
                 8
             }
+            0x47 => {
+                /* LD B,A */
+                self.registers.b = self.registers.a;
+
+                4
+            }
             0x4F => {
                 /* LD C,A */
                 self.registers.c = self.registers.a;
 
                 4
             }
+            0x56 => {
+                /* LD D,(HL) */
+                let val = self.mmu.read(self.registers.get_hl());
+                self.registers.d = val;
+
+                8
+            }
             0x57 => {
                 /* LD D,A */
                 self.registers.d = self.registers.a;
+
+                4
+            }
+            0x5E => {
+                /* LD E,H */
+                self.registers.e = self.registers.h;
+
+                4
+            }
+            0x5F => {
+                /* LD E,A */
+                self.registers.e = self.registers.a;
 
                 4
             }
@@ -356,6 +426,12 @@ impl CPU {
             0x78 => {
                 /* LD A,B */
                 self.registers.a = self.registers.b;
+
+                4
+            }
+            0x79 => {
+                /* LD A,C */
+                self.registers.a = self.registers.c;
 
                 4
             }
@@ -383,9 +459,27 @@ impl CPU {
 
                 8
             }
+            0x87 => {
+                /* ADD A,A */
+                self.registers.a = self.alu8_add(self.registers.a, self.registers.a);
+
+                8
+            }
             0x90 => {
                 /* SUB B */
                 self.registers.a = self.alu8_sub(self.registers.a, self.registers.b);
+
+                4
+            }
+            0xA1 => {
+                /* AND C */
+                self.registers.a = self.alu8_and(self.registers.a, self.registers.c);
+
+                4
+            }
+            0xA9 => {
+                /* XOR C */
+                self.registers.a = self.alu8_xor(self.registers.a, self.registers.c);
 
                 4
             }
@@ -476,6 +570,9 @@ impl CPU {
 
                 16
             }
+            0xC8 => {
+                /* RET Z */
+            }
             0xC9 => {
                 /* RET */
                 self.registers.pc = self.pop_word();
@@ -496,10 +593,23 @@ impl CPU {
 
                 24
             },
+            0xD5 => {
+                /* PUSH DE */
+                self.push_word(self.registers.get_de());
+
+                16
+            }
             0xE0 => {
                 /* LDH (a8),A */
                 let addr = 0xFF00 + self.fetch_imm8() as u16;
                 self.mmu.write(addr, self.registers.a);
+
+                12
+            }
+            0xE1 => {
+                /* POP HL */
+                let hl = self.pop_word();
+                self.registers.set_hl(hl);
 
                 12
             }
@@ -509,9 +619,30 @@ impl CPU {
 
                 8
             }
+            0xE6 => {
+                /* AND d8 */
+                let d8 = self.fetch_imm8();
+                self.alu8_and(self.registers.a, d8);
+
+                8
+            }
+            0xE9 => {
+                /* JP (HL) */
+                let hl = self.registers.get_hl();
+                self.registers.pc = self.mmu.read_wide(hl);
+
+                4
+            }
             0xEA => {
+                /* LD (a16),A */
                 let addr = self.fetch_imm16();
                 self.mmu.write(addr, self.registers.a);
+
+                16
+            }
+            0xEF => {
+                /* RST 28h */
+                self.rst(0x28);
 
                 16
             }
@@ -531,7 +662,7 @@ impl CPU {
 
                 4
             }
-            0xF8 => {
+            0xFB => {
                 /* EI */
                 /* TODO: the IME needs to be set after the next instruction, this is not what is
                  * going on so far, this is putting the timings off
@@ -566,6 +697,30 @@ impl CPU {
 
                 8
             }
+            0x37 => {
+                let low_nibble = self.registers.a & 0x0F;
+                self.registers.a >>= 4;
+                self.registers.a |= low_nibble << 4; 
+
+                self.registers.set_flag(CpuFlag::Z, self.registers.a == 0);
+                self.registers.set_flag(CpuFlag::N, false);
+                self.registers.set_flag(CpuFlag::H, false);
+                self.registers.set_flag(CpuFlag::C, false);
+
+                8
+            }
+            0x47 => {
+                /* BIT 0,A */
+                self.test_bit(self.registers.a, 0);
+
+                8
+            }
+            0x5F => {
+                /* BIT 3,A */
+                self.test_bit(self.registers.a, 3);
+
+                8
+            }
             0x7C => {
                 /* Bit 7,H */
                 let h = self.registers.h;
@@ -573,6 +728,12 @@ impl CPU {
                 self.registers.set_flag(CpuFlag::Z, (h & (1 << 7)) > 0);
                 self.registers.set_flag(CpuFlag::N, false);
                 self.registers.set_flag(CpuFlag::H, true);
+
+                8
+            }
+            0xC8 => {
+                /* SET 1,B */
+                self.registers.b = CPU::set_bit(self.registers.b, 1);
 
                 8
             }
@@ -608,6 +769,17 @@ impl CPU {
         self.registers.sp += 2;
 
         val
+    }
+
+    fn alu16_add(&mut self, a: u16, b: u16) -> u16 {
+        let (res, overflow) = a.overflowing_add(b);
+
+        self.registers.set_flag(CpuFlag::Z, res == 0);
+        self.registers.set_flag(CpuFlag::N, false);
+        self.registers.set_flag(CpuFlag::H, res & (1 << 4) > 0);
+        self.registers.set_flag(CpuFlag::C, overflow);
+
+        res
     }
 
     fn alu8_add(&mut self, a: u8, b: u8) -> u8 {
@@ -752,5 +924,20 @@ impl CPU {
         self.registers.set_flag(CpuFlag::C, new_carry);
 
         res
+    }
+
+    fn rst(&mut self, n: u8) {
+        self.push_word(self.registers.pc);
+        self.registers.pc = n as u16;
+    }
+
+    fn test_bit(&mut self, byte: u8, n: u8) {
+        self.registers.set_flag(CpuFlag::Z,  byte & (1 << n) > 0);
+        self.registers.set_flag(CpuFlag::N, false);
+        self.registers.set_flag(CpuFlag::H, false);
+    }
+
+    fn set_bit(byte: u8, n: u8) -> u8 {
+        byte | (1 << n)
     }
 }

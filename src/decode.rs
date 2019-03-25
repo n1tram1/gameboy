@@ -4,14 +4,21 @@ use crate::registers::Registers;
 pub fn decode_instruction(opcode: u8, mmu: &MMU, regs: &Registers) -> String {
     match opcode {
         0x00 => String::from("NOP"),
+        0x01 => String::from("LD BC,d16"),
         0x02 => {
             String::from(format!("LD (BC), A (BC = {:4X}, A = {:2X})", regs.get_bc(), regs.a))
         },
-        0x05 => String::from(format!("DEC B (B = {})", regs.b)),
+        0x04 => {
+            String::from("INC B")
+        }
+        0x05 => String::from(format!("DEC B (B = {:2X})", regs.b)),
         0x06 => {
             let d8 = mmu.read(regs.pc + 1);
             String::from(format!("LD B, {:2X}", d8))
         },
+        0x0B => {
+            String::from("DEC BC")
+        }
         0x0C => {
             String::from("INC C")
         }
@@ -79,8 +86,14 @@ pub fn decode_instruction(opcode: u8, mmu: &MMU, regs: &Registers) -> String {
         0x28 => {
             String::from(format!("JR Z,{}", mmu.read(regs.pc + 1) as i8))
         }
+        0x2A => {
+            format!("LD A, (HL+) (HL = {:4X}", regs.get_hl())
+        }
         0x2E => {
             String::from(format!("LD L,{:2X}", mmu.read(regs.pc + 1)))
+        }
+        0x2F => {
+            String::from("CPL")
         }
         0x31 => {
             let d16 = mmu.read_wide(regs.pc + 1);
@@ -98,8 +111,8 @@ pub fn decode_instruction(opcode: u8, mmu: &MMU, regs: &Registers) -> String {
         0x3D => {
             String::from("DEC A")
         }
-        0x04 => {
-            String::from("INC B")
+        0x47 => {
+            String::from("LD B,A")
         }
         0x4F => {
             String::from("LD C,A")
@@ -116,6 +129,9 @@ pub fn decode_instruction(opcode: u8, mmu: &MMU, regs: &Registers) -> String {
         0x78 => {
             String::from("LD A,B")
         }
+        0x79 => {
+            String::from("LD A,C")
+        }
         0x7B => {
             String::from("LD A, E")
         }
@@ -130,6 +146,12 @@ pub fn decode_instruction(opcode: u8, mmu: &MMU, regs: &Registers) -> String {
         }
         0x90 => {
             String::from("SUB B")
+        }
+        0xA1 => {
+            String::from("AND C")
+        }
+        0xA9 => {
+            String::from("XOR C")
         }
         0xAF => {
             let val = regs.a;
@@ -192,8 +214,14 @@ pub fn decode_instruction(opcode: u8, mmu: &MMU, regs: &Registers) -> String {
         0xE2 => {
             String::from("LD ($FF00 + C),A")
         }
+        0xE6 => {
+            format!("AND {:2x}", mmu.read(regs.pc + 1))
+        }
         0xEA => {
             String::from(format!("LD ({:4X}),A", mmu.read_wide(regs.pc + 1)))
+        }
+        0xEF => {
+            String::from("RST 28h")
         }
         0xF0 => {
             String::from(format!("LDH A,($FF00 + {:2X})", mmu.read(regs.pc + 1)))
@@ -201,7 +229,7 @@ pub fn decode_instruction(opcode: u8, mmu: &MMU, regs: &Registers) -> String {
         0xF3 => {
             String::from("DI")
         }
-        0xF8 => {
+        0xFB => {
             String::from("EI")
         }
         0xFE => {
