@@ -2,23 +2,27 @@ use std::collections::HashMap;
 use crate::palette::Palette;
 use crate::lcd::LCD;
 
-const VRAM_SIZE: usize = 0x2000;
-const VRAM_START_ADDR: usize = 0x8000;
 const VIEWPORT_WIDTH: usize = 160;
 const VIEWPORT_HEIGHT: usize = 144;
 const SCREEN_WIDTH_IN_TILES: usize = 32;
 
+const VRAM_SIZE: usize = 0x2000;
+const VRAM_START_ADDR: usize = 0x8000;
+
 const BG_TILEMAP_SZ: usize = 0x400;
 const BG_TILEDATA_SZ: usize = 0x1000;
+
+const OAM_SZ: usize = 160;
+const OAM_START_ADDR: usize = 0xFE00;
 
 const TILE_SZ: usize = 16;
 
 #[derive(Debug)]
 enum LCDMode {
-    HBlank,
-    VBlank,
-    OAMSearch,
-    Transfer,
+    HBlank, /* Mode 0 */
+    VBlank, /* Mode 1 */
+    OAMSearch, /* Mode 2 */
+    Transfer, /* Mode 3 */
 }
 
 pub struct PPU {
@@ -34,6 +38,7 @@ pub struct PPU {
     wy: u8,
     wx: u8,
     vram: [u8; VRAM_SIZE],
+    oam: [u8; OAM_SZ],
 
     lcd: LCD,
 
@@ -55,6 +60,7 @@ impl PPU {
             wy:   0x00,
             wx:   0x00,
             vram: [0; VRAM_SIZE],
+            oam: [0; OAM_SZ],
 
             lcd: LCD::new(VIEWPORT_WIDTH, VIEWPORT_HEIGHT),
 
@@ -94,8 +100,24 @@ impl PPU {
 
     pub fn write_vram(&mut self, addr: u16, val: u8) {
         if self.is_vram_accessible() {
-            let index = addr - 0x8000;
-            self.vram[index as usize] = val;
+            let index = addr as usize - VRAM_START_ADDR;
+            self.vram[index] = val;
+        }
+    }
+
+    pub fn read_oam(&self, addr: u16) -> u8 {
+        if self.is_vram_accessible() {
+            let index = addr as usize - OAM_START_ADDR;
+            self.oam[index]
+        } else {
+            0xFF
+        }
+    }
+
+    pub fn write_oam(&mut self, addr: u16, val: u8) {
+        if self.is_vram_accessible() {
+            let index = addr as usize - OAM_START_ADDR;
+            self.oam[index] = val;
         }
     }
 
@@ -103,8 +125,17 @@ impl PPU {
         let mode = self.get_mode();
 
         match mode {
-            LCDMode::HBlank | LCDMode::VBlank => self.is_lcd_disabled(),
-            _ => false,
+            LCDMode::HBlank | LCDMode::VBlank | LCDMode::OAMSearch => true,
+            _ => self.is_lcd_disabled(),
+        }
+    }
+
+    fn is_oam_accessible(&self) -> bool {
+        let mode = self.get_mode();
+
+        match mode {
+            LCDMode::HBlank | LCDMode::VBlank =>true, 
+            _ => self.is_lcd_disabled(),
         }
     }
 

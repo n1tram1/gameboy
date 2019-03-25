@@ -10,6 +10,8 @@ mod ppu;
 mod decode;
 mod lcd;
 mod palette;
+mod joypad;
+mod timer;
 
 fn main() {
     let start = Instant::now();
