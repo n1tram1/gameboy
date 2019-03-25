@@ -3,6 +3,7 @@ use std::path;
 use crate::mbc;
 use crate::ppu;
 use crate::joypad;
+use crate::timer;
 
 const DMG_ROM_SIZE: usize = 0x100;
 const DMG_ROM: [u8; DMG_ROM_SIZE] = [
@@ -27,13 +28,16 @@ const DMG_ROM: [u8; DMG_ROM_SIZE] = [
 /* 8kB internal ram */
 const INTERNAL_RAM_SIZE: usize = 0x2000;
 const HIGH_RAM_SIZE: usize = 0x7f;
+const EMPTY_RAM_SZ: usize = 0x34;
 
 pub struct MMU {
     mbc: Box<mbc::MBC>,
     ram: [u8; INTERNAL_RAM_SIZE],
     high_ram: [u8; HIGH_RAM_SIZE],
+    empty_ram: [u8; EMPTY_RAM_SZ],
     ppu: ppu::PPU,
     joypad: joypad::Joypad,
+    timer: timer::Timer,
 
     interrupt_enable: u8,
     interrupt_flag: u8,
@@ -46,10 +50,11 @@ impl MMU {
             mbc: mbc::load_cartridge(path),
             ram: [0; INTERNAL_RAM_SIZE],
             high_ram: [0; HIGH_RAM_SIZE],
+            empty_ram: [0; EMPTY_RAM_SZ],
 
             ppu: ppu::PPU::new(),
-
             joypad: joypad::Joypad::new(),
+            timer: timer::Timer::new(),
 
             interrupt_enable: 0,
             interrupt_flag: 0,
@@ -60,6 +65,7 @@ impl MMU {
 
     pub fn do_cycle(&mut self) {
         self.ppu.do_cycle();
+        self.timer.do_cycles();
 
         // self.joypad.do_cycle(self.ppu.get_lcd_ref());
     }
@@ -72,12 +78,12 @@ impl MMU {
             0xA000...0xBFFF => panic!("NOT IMPLEMENTED"), /* 8KB External RAM */
             0xC000...0xDFFF => self.ram[(addr - 0xC000) as usize],   /* 8kB Internal RAM size */
             0xE000...0xFDFF => self.read(addr- 0x2000), /* Same as C000-DDFF (ECHO) */
-            0xFE00...0xFE9F => panic!("NOT IMPLEMENTED"), /* Sprite Attribute Table (OAM) */
+            0xFE00...0xFE9F => self.ppu.read_oam(addr), /* Sprite Attribute Table (OAM) */
             0xFEA0...0xFEFF => 0, /* Not Usable */
-            0xFF00...0xFF7F => self.read_io_port(addr),
+            0xFF00...0xFF4B => self.read_io_port(addr),
+            0xFF4C...0xFF7F => self.empty_ram[(addr - 0xFF4C) as usize],
             0xFF80...0xFFFE => self.high_ram[(addr - 0xFF80) as usize], /* High RAM (HRAM) */
             0xFFFF => self.interrupt_enable, /* Interrupt Enable Register */
-            _ => panic!("Out of bounds memory access at addr {}", addr),
         }
     }
 
@@ -85,7 +91,7 @@ impl MMU {
         match addr {
             0xFF00 => self.joypad.read(),
             0xFF01...0xFF02 => { eprintln!("Serial Data Transfer registers not implemented"); 0 },
-            0xFF04...0xFF07 => panic!("Timer registers not implemented"),
+            0xFF04...0xFF07 => self.timer.read(addr),
             0xFF0F => self.interrupt_flag,
             0xFF10...0xFF3F => 0, /* Sound I/O Ports, sound not implemented for now. */
             0xFF40...0xFF4B => self.ppu.read_reg(addr),
@@ -103,7 +109,9 @@ impl MMU {
             0x8000...0x9FFF => self.ppu.write_vram(addr, value), /* 8KB Video RAM (VRAM) */
             0xC000...0xDFFF => self.ram[(addr - 0xC000) as usize] = value,
             0xE000...0xFDFF => self.write(addr - 0x2000, value),
-            0xFF00...0xFF7F => self.write_io_port(addr, value),
+            0xFE00...0xFE9F => self.ppu.write_oam(addr, value),
+            0xFF00...0xFF4B | 0xFF50 => self.write_io_port(addr, value),
+            0xFF4C...0xFF4F | 0xFF51...0xFF7F => self.empty_ram[(addr - 0xFF4C) as usize] = value,
             0xFF80...0xFFFE => self.high_ram[(addr - 0xFF80) as usize] = value,
             0xFEA0...0xFFEF => {},
             0xFFFF => self.interrupt_enable = value,
@@ -115,7 +123,7 @@ impl MMU {
         match addr {
             0xFF00 => self.joypad.write(value),
             0xFF01...0xFF02 => eprintln!("Serial Data Transfer registers not implemented"),
-            0xFF04...0xFF07 => panic!("Timer registers not implemented"),
+            0xFF04...0xFF07 => self.timer.write(addr, value),
             0xFF0F => self.interrupt_flag = value,
             0xFF10...0xFF3F => (), /* Sound I/O Ports, sound not implemented for now. */
             0xFF40...0xFF4B => self.ppu.write_reg(addr, value),
@@ -127,5 +135,9 @@ impl MMU {
     pub fn write_wide(&mut self, addr: u16, value: u16) {
         self.write(addr + 1, (value >> 8) as u8);
         self.write(addr, value as u8);
+    }
+
+    pub fn is_dmg_disabled(&self) -> bool {
+        self.dmg_disabled
     }
 }
